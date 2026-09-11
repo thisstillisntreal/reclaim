@@ -78,6 +78,20 @@ Invoke-Test 'walker: cloud placeholder attributes are recognised' {
     Assert-True (-not [Reclaim.Walker]::IsPlaceholder(0x20)) 'Archive only is local'
 }
 
+Invoke-Test 'walker: files dated in the future are not "recent", and are counted' {
+    $root = New-TestDir 'future'
+    New-FixtureFile "$root\future.bin" 2097152
+    New-FixtureFile "$root\now.bin" 2097152
+    (Get-Item -LiteralPath "$root\future.bin").LastWriteTime = [datetime]'2088-09-10'
+    $o = New-WalkOptions
+    $o.RecentMinBytes = 1048576
+    $r = [Reclaim.Walker]::Scan($root, $o)
+    $paths = @($r.Files | ForEach-Object { $_.Path })
+    Assert-True ($paths -contains "$root\now.bin") 'a file written now is recent'
+    Assert-True (-not ($paths -contains "$root\future.bin")) 'a 2088 timestamp is not recent'
+    Assert-Equal 1 ([int]$r.FutureDated) 'future-dated files are counted'
+}
+
 Invoke-Test 'walker: recent files are captured with write time' {
     $root = New-TestDir 'recent'
     New-FixtureFile "$root\new.bin" 2097152

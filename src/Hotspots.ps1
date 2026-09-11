@@ -31,7 +31,7 @@ function Get-ReclaimHotspots([string]$Drive) {
     $recent = @($cur.recentFiles | Where-Object { $_.lastWrite })
     $window = {
         param([double]$MaxHours)
-        @($recent | Where-Object { ($now - [datetime]$_.lastWrite).TotalHours -le $MaxHours } | Select-Object -First 10)
+        @($recent | Where-Object { $age = ($now - [datetime]$_.lastWrite).TotalHours; $age -ge 0 -and $age -le $MaxHours } | Select-Object -First 10)
     }
     $kb = Get-ReclaimKb
     $known = @($cur.items | Where-Object {
@@ -56,6 +56,10 @@ function Write-ReclaimHotspotsReport($H) {
     Write-Host ''
     Write-Host ("Hotspots on {0}   scan {1}   {2}" -f $c.root, $c.time, $c.mode) -ForegroundColor White
     Write-Host ("  Free now     {0} of {1}" -f (Format-Bytes $c.volume.free), (Format-Bytes $c.volume.total))
+    $fd = $c.totals.PSObject.Properties['futureDated']
+    if ($fd -and [long]$fd.Value -gt 0) {
+        Write-Host ("  Clock        {0:N0} file(s) carry last-write times in the future; they are ignored for 'recent'." -f [long]$fd.Value) -ForegroundColor Yellow
+    }
     if ($null -eq $H.Previous) {
         $why = if ($H.SkippedOtherMode) { "no earlier $($c.mode) scan ($($H.SkippedOtherMode) scan(s) in the other mode ignored: different visibility is not growth)" } else { 'no earlier scan of this drive' }
         Write-Host "  Growth       $why - this walk is the baseline; growth shows from the next run." -ForegroundColor Yellow

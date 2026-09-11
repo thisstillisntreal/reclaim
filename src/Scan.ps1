@@ -92,7 +92,7 @@ function Invoke-ReclaimScanPath([string]$Root, [string]$Label) {
         volume          = [ordered]@{ total = $total; free = $free; used = ($total - $free) }
         totals          = [ordered]@{
             onDisk = $rootDir.OnDisk; logical = $rootDir.Logical; files = $r.TotalFiles
-            dirs = $r.Dirs.Count; placeholderLogical = $rootDir.PlaceholderLogical
+            dirs = $r.Dirs.Count; placeholderLogical = $rootDir.PlaceholderLogical; futureDated = $r.FutureDated
         }
         itemizedOnDisk  = $itemized
         items           = @($records)

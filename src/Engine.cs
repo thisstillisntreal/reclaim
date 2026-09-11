@@ -328,6 +328,8 @@ namespace Reclaim
         public bool BackupPrivilege;
         public long TotalFiles;
         public long ElapsedMs;
+        public long FutureDated;     // files whose last-write time is more than a day in the future
+        public long FutureCutoff;
         public List<DirNode> Dirs = new List<DirNode>();
         public List<FileRec> Files = new List<FileRec>();
         public List<string> Denied = new List<string>();
@@ -460,6 +462,7 @@ namespace Reclaim
             // Apply the requested state both ways: an earlier walk may have left the privilege on.
             r.BackupPrivilege = Native.SetBackupPrivilege(opt.UseBackupPrivilege) && opt.UseBackupPrivilege;
             long recentCutoff = DateTime.UtcNow.AddDays(-opt.RecentDays).ToFileTimeUtc();
+            r.FutureCutoff = DateTime.UtcNow.AddDays(1).ToFileTimeUtc();
 
             DirNode top = new DirNode();
             top.Path = r.Root; top.Parent = -1; top.Depth = 0;
@@ -599,10 +602,13 @@ namespace Reclaim
             d.OwnOnDisk += alloc; d.OnDisk += alloc;
             d.OwnLogical += eof; d.Logical += eof;
             if (IsPlaceholder(attrs)) d.PlaceholderLogical += eof;
-            if (lastWrite > d.NewestWrite) d.NewestWrite = lastWrite;
+            // Timestamps in the future (wrong clocks, restored copies) are never "recent" or "newest".
+            bool future = lastWrite > r.FutureCutoff;
+            if (future) r.FutureDated++;
+            else if (lastWrite > d.NewestWrite) d.NewestWrite = lastWrite;
 
             int rule = opt.Rules.Count > 0 ? Rule.Best(opt.Rules, true, name, full) : -1;
-            bool recent = lastWrite >= recentCutoff && alloc >= opt.RecentMinBytes;
+            bool recent = !future && lastWrite >= recentCutoff && alloc >= opt.RecentMinBytes;
             if (rule >= 0 || recent || alloc >= opt.BigFileMinBytes)
             {
                 FileRec f = new FileRec();
