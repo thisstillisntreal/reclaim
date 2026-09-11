@@ -1,0 +1,12 @@
+{
+  "dataRoot": "Y:\\_reclaim",
+  "hubClient": "C:\\path\\to\\hub.py",
+  "python": "python",
+  "hubEnabled": true,
+  "worklogKey": "worklog-reclaim",
+  "dirUnknownMinBytes": 1073741824,
+  "fileUnknownMinBytes": 524288000,
+  "tableRows": 40,
+  "purgeDays": 30,
+  "advisorModel": "claude-haiku-4-5"
+}

@@ -1,0 +1,8 @@
+# machine-specific, never published
+config.local.json
+kb/local.json
+
+# test fixtures (left in place; nothing is auto-deleted)
+.testrun/
+
+*.log
