@@ -10,7 +10,8 @@ $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Assert.ps1')
 
 $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-$script:TestRunRoot = Join-Path $repo ".testrun\$stamp"
+# Outside the repo: apply refuses to touch Reclaim's own folders, fixtures included.
+$script:TestRunRoot = Join-Path (Split-Path -Qualifier $repo) "\_reclaim-testrun\$stamp"
 [void](New-Item -ItemType Directory -Force -Path $script:TestRunRoot)
 
 # Cross-volume target for move tests (Q: fixtures -> Y: quarantine), falls back to same volume.

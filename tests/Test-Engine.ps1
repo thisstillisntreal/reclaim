@@ -55,6 +55,22 @@ Invoke-Test 'walker: access-denied directory is recorded' {
     }
 }
 
+Invoke-Test 'walker: UseBackupPrivilege=$false holds even after an elevated walk enabled it in this process' {
+    $root = New-TestDir 'denied2'
+    [void](New-Item -ItemType Directory -Path "$root\locked")
+    New-FixtureFile "$root\locked\hidden.bin" 4096
+    & icacls.exe "$root\locked" /deny '*S-1-1-0:(RD)' | Out-Null
+    try {
+        $on = New-Object Reclaim.ScanOptions
+        $on.UseBackupPrivilege = $true
+        [void][Reclaim.Walker]::Scan($root, $on)
+        $r = [Reclaim.Walker]::Scan($root, (New-WalkOptions))
+        Assert-Equal 1 $r.Denied.Count 'denied again once the option turns the privilege off'
+    } finally {
+        & icacls.exe "$root\locked" /remove:d '*S-1-1-0' | Out-Null
+    }
+}
+
 Invoke-Test 'walker: cloud placeholder attributes are recognised' {
     Assert-True ([Reclaim.Walker]::IsPlaceholder(0x400000)) 'RecallOnDataAccess'
     Assert-True ([Reclaim.Walker]::IsPlaceholder(0x40000)) 'RecallOnOpen'

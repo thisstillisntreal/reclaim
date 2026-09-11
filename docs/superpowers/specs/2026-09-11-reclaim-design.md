@@ -32,7 +32,7 @@ Explain, then ask, then act, then leave a receipt. Unknown means "unknown".
 Entries: `id, name, patterns[], creator, purpose, breaks, safety, regenerates, action,
 method, command, processes[], hotspot, notes`. Patterns are globs: `?:` any drive, `*` one
 segment, `**` any depth, `%USERS%` = `?:\Users\*`. Safety: SAFE / SAFE-IF-CLOSED / MOVE /
-ADMIN-ONLY / KEEP / UNKNOWN. Most specific pattern wins (longest literal prefix).
+ADMIN-ONLY / KEEP / UNKNOWN. Most specific pattern wins (most literal characters).
 
 ## Item model (deterministic)
 Bottom-up over the scanned tree. Big files first, then directories deepest-first:
@@ -46,7 +46,7 @@ Item ids are `<drive>-<nnn>` ranked by on-disk bytes within a scan.
 `scans\<D>-<ts>.json` (meta, items, denied, skipped, top files, recent files) +
 `scans\<D>-<ts>.dirs.tsv` (every dir ≥ 1 MB: path, on-disk, logical, files, newest write)
 · `plans\` · `receipts\<id>.json` · `quarantine\<yyyy-MM-dd>\<id>\` (+ `manifest.json`) ·
-`moved\<id>\` · `views\<ts>.html` · `logs\reclaim.log` · `pins.json` · `worklog-pending.jsonl`.
+`moved\<id>\` · `views\<ts>.html` · `logs\reclaim.log` · `pins.json` · `worklog-pending.txt`.
 
 ## Commands
 - `scan [drive|all]` (default C:) — walk, classify, persist, ranked table, denied list.
@@ -68,14 +68,14 @@ Item ids are `<drive>-<nnn>` ranked by on-disk bytes within a scan.
 
 ## Moves (the only state-changing code)
 Per file: sha256 source → copy (same volume: rename) → sha256 destination → compare → only then
-remove source. Mismatch or failure: source untouched, receipt marks the file failed. Empty
-source directories are removed only after every file in them moved. Real before/after free
+remove source. Mismatch or failure: source untouched, receipt marks the file failed. Emptied
+folders are left in place (nothing is deleted; undo refills them). Real before/after free
 space and per-file status go in the receipt.
 
 ## Hub
 Every command run appends one line to KV `worklog-reclaim` via the local hub client
 (path from gitignored `config.local.json`). Read-modify-write that only appends. On failure the
-line goes to `worklog-pending.jsonl` and is flushed on the next success; the failure is printed.
+line goes to `worklog-pending.txt` and is flushed on the next success; the failure is printed.
 
 ## Advisor (LLM, read-only)
 `claude -p --model claude-haiku-4-5` with names/sizes/extensions only (no file contents).

@@ -29,7 +29,7 @@ function ConvertTo-ReclaimRegex([string]$Pattern) {
 # Number of literal characters: the more a pattern spells out, the more specific it is.
 function Get-ReclaimPatternSpecificity([string]$Pattern) {
     $p = Expand-ReclaimPattern $Pattern
-    return ($p.ToCharArray() | Where-Object { $_ -ne '*' -and $_ -ne '?' }).Count
+    return @($p.ToCharArray() | Where-Object { $_ -ne '*' -and $_ -ne '?' }).Count
 }
 
 # One Reclaim.Rule per pattern, carrying its entry id. Returned as a single List object.
@@ -49,13 +49,16 @@ function ConvertTo-ReclaimRules([object[]]$Entries) {
     return , $list
 }
 
-# kb\knowledge-base.json, then kb\local.json (machine-specific, gitignored); same id = local wins.
+# kb\knowledge-base.json, then kb\local.json (machine-specific, gitignored), then the optional
+# kbExtra config file. A later file's entry with the same id replaces the earlier one.
 function Get-ReclaimKb {
     if ($null -ne $script:ReclaimKb) { return $script:ReclaimKb }
+    $sources = @((Join-Path $script:ReclaimRepoDir 'kb\knowledge-base.json'), (Join-Path $script:ReclaimRepoDir 'kb\local.json'))
+    $extra = (Get-ReclaimConfig).PSObject.Properties['kbExtra']
+    if ($extra -and $extra.Value) { $sources += [string]$extra.Value }
     $byId = @{}
     $order = New-Object System.Collections.ArrayList
-    foreach ($name in 'knowledge-base.json', 'local.json') {
-        $f = Join-Path $script:ReclaimRepoDir "kb\$name"
+    foreach ($f in $sources) {
         if (-not (Test-Path -LiteralPath $f)) { continue }
         $doc = [IO.File]::ReadAllText($f) | ConvertFrom-Json
         foreach ($e in @($doc.entries)) {

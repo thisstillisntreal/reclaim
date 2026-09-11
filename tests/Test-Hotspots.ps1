@@ -25,6 +25,21 @@ Invoke-Test 'hotspots: a planted growing file is the top growth and is listed in
     Assert-Equal (Get-Alloc 6291456 $cl) ([long]$recent[0].onDisk) 'recent file on-disk is the new size'
 }
 
+Invoke-Test 'hotspots: growth split between children keeps the parent; a grandchild that explains it wins' {
+    $root = New-TestDir 'hot-split'
+    [void](New-Item -ItemType Directory -Force -Path "$root\split\a", "$root\split\b", "$root\deep\x\y")
+    foreach ($f in 'split\a\1.bin', 'split\b\1.bin', 'deep\x\y\1.bin') { New-FixtureFile "$root\$f" 1048576 }
+    [void](Invoke-ReclaimScanPath -Root $root -Label 'G')
+    foreach ($g in @(@('split\a\1.bin', 3145728), @('split\b\1.bin', 3145728), @('deep\x\y\1.bin', 6291456))) {
+        $fs = [IO.File]::Open("$root\$($g[0])", [IO.FileMode]::Append)
+        try { $fs.Write((New-Object byte[] $g[1]), 0, $g[1]) } finally { $fs.Close() }
+    }
+    [void](Invoke-ReclaimScanPath -Root $root -Label 'G')
+    $paths = @((Get-ReclaimHotspots -Drive 'G').Growth | ForEach-Object { $_.Path })
+    foreach ($p in 'split', 'split\a', 'split\b', 'deep\x\y') { Assert-True ($paths -contains "$root\$p") "$p reported" }
+    foreach ($p in 'deep', 'deep\x') { Assert-True (-not ($paths -contains "$root\$p")) "$p suppressed by its grandchild" }
+}
+
 Invoke-Test 'hotspots: growth is only measured against a previous scan taken in the same mode' {
     $root = New-TestDir 'hot-mode'
     New-FixtureFile "$root\a.bin" 2097152

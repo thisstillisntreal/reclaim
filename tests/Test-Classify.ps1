@@ -30,6 +30,11 @@ Invoke-Test 'kb: more literal characters = more specific' {
     Assert-True ($b -gt $c) "SoftwareDistribution ($b) beats **\*.iso ($c)"
 }
 
+Invoke-Test 'kb: specificity of a pattern with one literal character (StrictMode scalar trap)' {
+    Assert-Equal 1 (Get-ReclaimPatternSpecificity 'a*') 'one literal character'
+    Assert-Equal 0 (Get-ReclaimPatternSpecificity '*') 'no literal characters'
+}
+
 Invoke-Test 'kb: shipped knowledge base loads and covers the required seeds' {
     $kb = Get-ReclaimKb
     foreach ($id in 'hiberfil', 'pagefile', 'swapfile', 'windows-old', 'winreagent', 'softwaredistribution',

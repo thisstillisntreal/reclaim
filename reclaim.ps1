@@ -72,13 +72,13 @@ try {
         'plan'     { [void](Invoke-ReclaimPlan -Drives (Resolve-DriveArgs 'all')) }
         'apply'    {
             $only = @(if (Get-FlagValue 'only') { (Get-FlagValue 'only') -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } })
-            Invoke-ReclaimApply -Only $only -YesToSafe:(Test-Flag 'yes-to-safe')
+            [void](Invoke-ReclaimApply -Only $only -YesToSafe:(Test-Flag 'yes-to-safe'))
         }
-        'undo'     { Invoke-ReclaimUndo -ReceiptId (Get-RequiredPositional 'receipt id') }
-        'show'     { Invoke-ReclaimShow -Target (Get-RequiredPositional 'path or drive') -NoOpen:(Test-Flag 'no-open') }
+        'undo'     { [void](Invoke-ReclaimUndo -ReceiptId (Get-RequiredPositional 'receipt id')) }
+        'show'     { [void](Invoke-ReclaimShow -Target (Get-RequiredPositional 'path or drive') -NoOpen:(Test-Flag 'no-open')) }
         'status'   { Show-ReclaimStatus }
         'pin'      { Set-ReclaimPin -ReceiptId (Get-RequiredPositional 'receipt id') }
-        'purge'    { Invoke-ReclaimPurge -Execute:(Test-Flag 'execute') }
+        'purge'    { [void](Invoke-ReclaimPurge -Execute:(Test-Flag 'execute')) }
         default    { Write-Host "Unknown command '$command'." -ForegroundColor Red; Show-ReclaimHelp; $exit = 2 }
     }
 } catch {

@@ -100,7 +100,12 @@ namespace Reclaim
 
         // Elevated tokens carry SeBackupPrivilege (disabled). Enabled + FILE_FLAG_BACKUP_SEMANTICS,
         // directory listings bypass ACLs (System Volume Information, other profiles). Read-only use.
-        public static bool EnableBackupPrivilege()
+        public static bool EnableBackupPrivilege() { return SetBackupPrivilege(true); }
+
+        // The privilege is process-wide: once on it stays on, so a walk that must not use it has to
+        // turn it off. Returns true when the requested state was applied (false when the token
+        // does not hold the privilege at all, i.e. unelevated).
+        public static bool SetBackupPrivilege(bool enable)
         {
             IntPtr tok;
             if (!OpenProcessToken(GetCurrentProcess(), 0x0020 | 0x0008, out tok)) return false;
@@ -109,7 +114,7 @@ namespace Reclaim
                 long luid;
                 if (!LookupPrivilegeValueW(null, "SeBackupPrivilege", out luid)) return false;
                 TOKEN_PRIVILEGES tp = new TOKEN_PRIVILEGES();
-                tp.Count = 1; tp.Luid = luid; tp.Attributes = 2;
+                tp.Count = 1; tp.Luid = luid; tp.Attributes = enable ? 2 : 0;
                 if (!AdjustTokenPrivileges(tok, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero)) return false;
                 return Marshal.GetLastWin32Error() == 0;
             }
@@ -452,7 +457,8 @@ namespace Reclaim
             System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
             ScanResult r = new ScanResult();
             r.Root = NormalizeRoot(root);
-            if (opt.UseBackupPrivilege) r.BackupPrivilege = Native.EnableBackupPrivilege();
+            // Apply the requested state both ways: an earlier walk may have left the privilege on.
+            r.BackupPrivilege = Native.SetBackupPrivilege(opt.UseBackupPrivilege) && opt.UseBackupPrivilege;
             long recentCutoff = DateTime.UtcNow.AddDays(-opt.RecentDays).ToFileTimeUtc();
 
             DirNode top = new DirNode();

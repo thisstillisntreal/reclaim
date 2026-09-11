@@ -55,18 +55,17 @@ function Get-StringSha256([string]$Text) {
     } finally { $sha.Dispose() }
 }
 
-# Compiles src\Engine.cs once per source hash into %LOCALAPPDATA%\Reclaim\bin and loads it.
+# Compiles src\*.cs together, once per source hash, into %LOCALAPPDATA%\Reclaim\bin and loads it.
 function Import-ReclaimEngine {
     if ('Reclaim.Walker' -as [type]) { return }
-    $src  = Join-Path $script:ReclaimSrcDir 'Engine.cs'
-    $code = [IO.File]::ReadAllText($src)
+    $srcs = @(Get-ChildItem -LiteralPath $script:ReclaimSrcDir -Filter '*.cs' | Sort-Object Name | ForEach-Object { $_.FullName })
+    $code = ($srcs | ForEach-Object { [IO.File]::ReadAllText($_) }) -join "`n"
     $hash = (Get-StringSha256 $code).Substring(0, 16)
     $bin  = Join-Path $env:LOCALAPPDATA 'Reclaim\bin'
     $dll  = Join-Path $bin "Reclaim.Engine.$hash.dll"
     if (-not (Test-Path -LiteralPath $dll)) {
         if (-not (Test-Path -LiteralPath $bin)) { [void](New-Item -ItemType Directory -Force -Path $bin) }
-        Add-Type -TypeDefinition $code -Language CSharp -OutputAssembly $dll -OutputType Library `
-            -ReferencedAssemblies 'System.Core'
+        Add-Type -Path $srcs -OutputAssembly $dll -OutputType Library -ReferencedAssemblies 'System.Core'
     }
     if (-not ('Reclaim.Walker' -as [type])) { Add-Type -Path $dll }
 }
