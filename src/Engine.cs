@@ -527,6 +527,48 @@ namespace Reclaim
             }
         }
 
+        // One file's sizes from its folder's listing (the file itself is never opened). Null when absent.
+        public static FileRec StatFile(string path)
+        {
+            string full = System.IO.Path.GetFullPath(path);
+            string dir = System.IO.Path.GetDirectoryName(full);
+            string name = System.IO.Path.GetFileName(full);
+            if (dir == null || string.IsNullOrEmpty(name)) return null;
+            IntPtr buf = Marshal.AllocHGlobal(BufSize);
+            try
+            {
+                using (SafeFileHandle h = Native.CreateFileW(Native.Long(dir), Native.FILE_LIST_DIRECTORY,
+                    Native.SHARE_ALL, IntPtr.Zero, Native.OPEN_EXISTING, Native.FLAG_BACKUP_SEMANTICS, IntPtr.Zero))
+                {
+                    if (h.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+                    while (Native.GetFileInformationByHandleEx(h, Native.FileFullDirectoryInfo, buf, BufSize))
+                    {
+                        int off = 0;
+                        while (true)
+                        {
+                            IntPtr p = IntPtr.Add(buf, off);
+                            int next = Marshal.ReadInt32(p, 0);
+                            uint attrs = (uint)Marshal.ReadInt32(p, 56);
+                            string n = Marshal.PtrToStringUni(IntPtr.Add(p, 68), Marshal.ReadInt32(p, 60) / 2);
+                            if ((attrs & ATTR_DIRECTORY) == 0 && string.Equals(n, name, StringComparison.OrdinalIgnoreCase))
+                            {
+                                FileRec f = new FileRec();
+                                f.Path = full; f.Dir = -1; f.RuleIndex = -1; f.Attributes = attrs;
+                                f.LastWrite = Marshal.ReadInt64(p, 24);
+                                f.Logical = Marshal.ReadInt64(p, 40);
+                                f.OnDisk = Marshal.ReadInt64(p, 48);
+                                return f;
+                            }
+                            if (next == 0) break;
+                            off += next;
+                        }
+                    }
+                }
+            }
+            finally { Marshal.FreeHGlobal(buf); }
+            return null;
+        }
+
         static void RecordFailure(ScanResult r, DirNode d, int err)
         {
             if (err == Native.ERROR_ACCESS_DENIED) { d.Denied = true; r.Denied.Add(d.Path); }
