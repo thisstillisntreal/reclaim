@@ -61,6 +61,18 @@ Invoke-Test 'advisor: replies are parsed defensively; gaps stay unknown' {
     foreach ($f in 'what', 'creator', 'purpose', 'risk') { Assert-Equal 'unknown' $b.$f "$f unknown on unparseable reply" }
 }
 
+Invoke-Test 'advisor: CLI call is isolated from user plugins, hooks, MCP servers and tools' {
+    $a = @(Get-ReclaimAdvisorArgs -Model 'claude-haiku-4-5')
+    foreach ($f in '-p', '--safe-mode', '--strict-mcp-config', '--no-session-persistence', '--system-prompt', '--tools') {
+        Assert-True ($a -contains $f) "has $f"
+    }
+    $sys = $a[[array]::IndexOf($a, '--system-prompt') + 1]
+    Assert-True ($sys -notmatch '["&|<>^%]') 'system prompt survives native argument passing'
+    Assert-True ($sys -like '*unknown*') 'system prompt demands unknown over guessing'
+    $t = $a[[array]::IndexOf($a, '--tools') + 1]
+    Assert-True ($t -eq '""' -or $t -eq '') "tools list is empty ($t)"
+}
+
 Invoke-Test 'advisor: prompt carries names and sizes only and demands "unknown" over guessing' {
     $root = New-TestDir 'advisor'
     [void](New-Item -ItemType Directory -Force -Path "$root\thing")

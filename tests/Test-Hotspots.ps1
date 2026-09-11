@@ -25,6 +25,20 @@ Invoke-Test 'hotspots: a planted growing file is the top growth and is listed in
     Assert-Equal (Get-Alloc 6291456 $cl) ([long]$recent[0].onDisk) 'recent file on-disk is the new size'
 }
 
+Invoke-Test 'hotspots: growth is only measured against a previous scan taken in the same mode' {
+    $root = New-TestDir 'hot-mode'
+    New-FixtureFile "$root\a.bin" 2097152
+    $first = Invoke-ReclaimScanPath -Root $root -Label 'M'
+    $j = [IO.File]::ReadAllText($first.file) -replace '"mode":\s*"[A-Z]+"', '"mode":  "OTHER-MODE"'
+    [IO.File]::WriteAllText($first.file, $j)
+    New-FixtureFile "$root\b.bin" 3145728
+    [void](Invoke-ReclaimScanPath -Root $root -Label 'M')
+    $h = Get-ReclaimHotspots -Drive 'M'
+    Assert-Equal $null $h.Previous 'a scan from another mode is not a baseline'
+    Assert-Equal 0 @($h.Growth).Count 'no growth invented across modes'
+    Assert-Equal 1 $h.SkippedOtherMode 'the skipped scan is reported'
+}
+
 Invoke-Test 'hotspots: first scan of a drive reports no growth instead of inventing it' {
     $root = New-TestDir 'hot-first'
     New-FixtureFile "$root\a.bin" 2097152

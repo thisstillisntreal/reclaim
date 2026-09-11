@@ -152,7 +152,11 @@ function Write-ReclaimScanReport($Doc) {
     Write-Host ("  Measured     {0} on disk ({1} logical) in {2:N0} files, {3:N0} folders" -f (Format-Bytes $t.onDisk), (Format-Bytes $t.logical), $t.files, $t.dirs)
     if ($Doc.root.Length -le 3) {
         $gap = [long]$v.used - [long]$t.onDisk
-        Write-Host ("  Unmeasured   {0} = volume used minus measured: denied folders, NTFS metadata, shadow copies. Lower bound: hard links (WinSxS) are counted once per link." -f (Format-Bytes $gap)) -ForegroundColor Yellow
+        if ($gap -ge 0) {
+            Write-Host ("  Unmeasured   {0} = volume used minus measured: denied folders, NTFS metadata, shadow copies. A lower bound: hard links (WinSxS) are counted once per link." -f (Format-Bytes $gap)) -ForegroundColor Yellow
+        } else {
+            Write-Host ("  Overcount    measured is {0} MORE than the volume uses: hard links (WinSxS / System32) are counted once per link, so Windows folder sizes overstate real usage by at least that much." -f (Format-Bytes (-$gap))) -ForegroundColor Yellow
+        }
     }
     if ([long]$t.placeholderLogical -gt 0) {
         Write-Host ("  Cloud-only   {0} of OneDrive placeholders occupy ~0 on disk; never counted as reclaimable" -f (Format-Bytes $t.placeholderLogical))

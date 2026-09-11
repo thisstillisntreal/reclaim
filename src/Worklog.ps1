@@ -31,24 +31,31 @@ function Write-ReclaimWorklog {
     Write-ReclaimLog "worklog: $line"
     $pending = Get-ReclaimPendingPath
 
-    if (-not $cfg.hubEnabled -or -not $cfg.hubClient -or -not (Test-Path -LiteralPath $cfg.hubClient)) {
-        [IO.File]::AppendAllText($pending, "$line`n")
-        return [pscustomobject]@{ Line = $line; Sent = $false; Error = 'hub disabled or hub client not configured' }
+    # The hub has no compare-and-swap, so concurrent local runs would lose lines in the
+    # read-modify-write append. One lock serializes the pending file and the hub append.
+    $lock = Enter-ReclaimLock 'worklog'
+    if ($null -eq $lock) {
+        return [pscustomobject]@{ Line = $line; Sent = $false; Error = 'another reclaim run held the worklog lock for 2 minutes; line is only in logs\reclaim.log' }
     }
-
-    $queued = if (Test-Path -LiteralPath $pending) { [IO.File]::ReadAllText($pending).Trim() } else { '' }
-    $payload = (@($queued, $line) | Where-Object { $_ }) -join "`n"
-    $res = Invoke-ReclaimHubKv 'append' $cfg.worklogKey $payload
-    if ($res.Code -ne 0) {
-        [IO.File]::AppendAllText($pending, "$line`n")
-        $err = ($res.Output -split "`n" | Select-Object -Last 1)
-        return [pscustomobject]@{ Line = $line; Sent = $false; Error = "hub append failed (exit $($res.Code)): $err" }
-    }
-    if ($queued) {
-        [IO.File]::AppendAllText((Join-Path (Get-ReclaimPath 'logs') 'worklog-flushed.txt'), "$queued`n")
-        [IO.File]::WriteAllText($pending, '')
-    }
-    return [pscustomobject]@{ Line = $line; Sent = $true; Error = $null }
+    try {
+        if (-not $cfg.hubEnabled -or -not $cfg.hubClient -or -not (Test-Path -LiteralPath $cfg.hubClient)) {
+            [IO.File]::AppendAllText($pending, "$line`n")
+            return [pscustomobject]@{ Line = $line; Sent = $false; Error = 'hub disabled or hub client not configured' }
+        }
+        $queued = if (Test-Path -LiteralPath $pending) { [IO.File]::ReadAllText($pending).Trim() } else { '' }
+        $payload = (@($queued, $line) | Where-Object { $_ }) -join "`n"
+        $res = Invoke-ReclaimHubKv 'append' $cfg.worklogKey $payload
+        if ($res.Code -ne 0) {
+            [IO.File]::AppendAllText($pending, "$line`n")
+            $err = ($res.Output -split "`n" | Select-Object -Last 1)
+            return [pscustomobject]@{ Line = $line; Sent = $false; Error = "hub append failed (exit $($res.Code)): $err" }
+        }
+        if ($queued) {
+            [IO.File]::AppendAllText((Join-Path (Get-ReclaimPath 'logs') 'worklog-flushed.txt'), "$queued`n")
+            [IO.File]::WriteAllText($pending, '')
+        }
+        return [pscustomobject]@{ Line = $line; Sent = $true; Error = $null }
+    } finally { $lock.Dispose() }
 }
 
 function Write-WorklogStatus($Result) {

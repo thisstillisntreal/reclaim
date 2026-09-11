@@ -52,24 +52,50 @@ function ConvertFrom-ReclaimAdvisorReply([string]$Text) {
     return [pscustomobject]$out
 }
 
+# Passed on the command line, so: no double quotes and no cmd.exe metacharacters.
+$script:AdvisorSystemPrompt = 'You are a read-only advisor for a Windows disk cleaner. You identify a file or folder from its path, names and sizes. Reply with only one JSON object with the keys what, creator, purpose and risk, and nothing else. For any key you are not confident about, the value must be exactly the word unknown. Never guess a plausible label.'
+
+# npm installs a claude.cmd shim that re-parses arguments through cmd.exe; use the exe behind it.
+function Get-ReclaimClaudeExe {
+    $cmd = Get-Command claude.cmd, claude.exe, claude -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $cmd) { return $null }
+    $exe = Join-Path (Split-Path -Parent $cmd.Source) 'node_modules\@anthropic-ai\claude-code\bin\claude.exe'
+    if ($cmd.Source -like '*.cmd' -and (Test-Path -LiteralPath $exe)) { return $exe }
+    return $cmd.Source
+}
+
+# --safe-mode: no plugins, hooks, skills or CLAUDE.md. --strict-mcp-config: no MCP servers.
+# --tools "": no tools. Without these the user's customizations load into the prompt
+# (measured: ~204k tokens, over the limit). Windows PowerShell 5.1 drops empty arguments, so '""'.
+function Get-ReclaimAdvisorArgs([string]$Model) {
+    $noTools = if ($PSVersionTable.PSVersion.Major -ge 7) { '' } else { '""' }
+    return @('-p', '--model', $Model, '--safe-mode', '--strict-mcp-config', '--tools', $noTools,
+        '--no-session-persistence', '--output-format', 'json', '--system-prompt', $script:AdvisorSystemPrompt)
+}
+
 function Invoke-ReclaimAdvisor($X) {
     $cfg = Get-ReclaimConfig
-    $claude = Get-Command claude.cmd, claude -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $claude) {
+    $exe = Get-ReclaimClaudeExe
+    if (-not $exe) {
         $a = ConvertFrom-ReclaimAdvisorReply ''
         $a.Error = 'claude CLI not found on PATH'
         return $a
     }
     $prompt = Get-ReclaimAdvisorPrompt $X
-    # Windows PowerShell 5.1 drops empty arguments; '""' reaches the CLI as an empty string.
-    $noTools = if ($PSVersionTable.PSVersion.Major -ge 7) { '' } else { '""' }
+    $cliArgs = Get-ReclaimAdvisorArgs -Model $cfg.advisorModel
     $ErrorActionPreference = 'Continue'
     $OutputEncoding = New-Object Text.UTF8Encoding $false
-    Write-Host "  Asking the advisor ($($cfg.advisorModel), no tools, names and sizes only) ..." -ForegroundColor DarkGray
-    $reply = $prompt | & $claude.Source -p --model $cfg.advisorModel --tools $noTools --output-format text 2>&1
+    Write-Host "  Asking the advisor ($($cfg.advisorModel); safe mode, no tools, no MCP; names and sizes only) ..." -ForegroundColor DarkGray
+    $out = $prompt | & $exe @cliArgs 2>&1
     $code = $LASTEXITCODE
-    $a = ConvertFrom-ReclaimAdvisorReply ((@($reply) | ForEach-Object { "$_" }) -join "`n")
-    if ($code -ne 0) { $a.Error = "claude exited $code" }
+    $text = (@($out) | ForEach-Object { "$_" }) -join "`n"
+    $reply = $text
+    try {
+        $j = $text | ConvertFrom-Json
+        if ($j.PSObject.Properties['result']) { $reply = [string]$j.result }
+    } catch { }
+    $a = ConvertFrom-ReclaimAdvisorReply $reply
+    if ($code -ne 0) { $a.Error = "claude exited $code" + $(if ($reply) { ': ' + (($reply -split "`n")[0]) } else { '' }) }
     return $a
 }
 

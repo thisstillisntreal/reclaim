@@ -103,6 +103,22 @@ function Write-ReclaimLog([string]$Line) {
     [IO.File]::AppendAllText((Join-Path $dir 'reclaim.log'), "$stamp $Line`r`n")
 }
 
+# Exclusive lock shared by every local run (elevated or not) on the same data root: an open file
+# with FileShare.None. Returns the stream (dispose to release) or $null after the timeout.
+# The .lock file itself is left in place.
+function Enter-ReclaimLock([string]$Name, [int]$TimeoutSec = 120) {
+    $path = Join-Path (Get-ReclaimPath) "$Name.lock"
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ($true) {
+        try {
+            return [IO.File]::Open($path, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        } catch [IO.IOException] {
+            if ((Get-Date) -gt $deadline) { return $null }
+            Start-Sleep -Milliseconds 150
+        }
+    }
+}
+
 function ConvertFrom-FileTicks([long]$Ticks) {
     if ($Ticks -le 0) { return $null }
     return [DateTime]::FromFileTimeUtc($Ticks).ToLocalTime()

@@ -52,6 +52,9 @@ def call(method, path, body=None):
         raise urllib.error.HTTPError(path, 500, "boom", {}, io.BytesIO(b""))
     kv = _load()
     if method == "GET":
+        if os.environ.get("FAKEHUB_DELAY"):
+            import time
+            time.sleep(float(os.environ["FAKEHUB_DELAY"]))   # hand back the value read before the pause
         if key not in kv:
             raise urllib.error.HTTPError(path, 404, "not found", {}, io.BytesIO(b""))
         return json.dumps({"key": key, "value": kv[key]})
@@ -91,4 +94,35 @@ Invoke-Test 'worklog: hub append only adds lines, never replaces; failures do no
     Assert-True ($lines[1] -like '*| scan | T |*first') "line 2: $($lines[1])"
     Assert-True (@($lines | Where-Object { $_ -like '*second' }).Count -eq 1) 'queued line flushed exactly once'
     Assert-True ($lines[-1] -like '*third') "last line: $($lines[-1])"
+}
+
+Invoke-Test 'worklog: concurrent runs all land (read-modify-write is serialized by a lock)' {
+    $dir = New-TestDir 'fakehub-concurrent'
+    $hub = New-FakeHub $dir
+    [IO.File]::WriteAllText((Join-Path $dir 'store.json'), '{"worklog-reclaim": "start"}')
+    $child = Join-Path $dir 'child.ps1'
+    [IO.File]::WriteAllText($child, @'
+param([string]$Repo, [string]$Hub, [string]$Data, [string]$Tag)
+$ErrorActionPreference = 'Stop'
+. (Join-Path $Repo 'src\Load.ps1')
+$env:RECLAIM_NO_HUB = $null
+$env:RECLAIM_HOME = $Data
+$env:FAKEHUB_DELAY = '1'
+Reset-ReclaimConfig
+$c = Get-ReclaimConfig
+$c.hubEnabled = $true
+$c.hubClient = $Hub
+$r = Write-ReclaimWorklog -Command 'scan' -Drive 'X' -Mode 'TEST' -Note $Tag
+if (-not $r.Sent) { exit 1 }
+'@)
+    $data = Join-Path $dir 'data'
+    $procs = foreach ($t in 'p1', 'p2', 'p3') {
+        Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $child, $script:ReclaimRepoDir, $hub, $data, $t)
+    }
+    $procs | Wait-Process -Timeout 90
+    $value = ([IO.File]::ReadAllText((Join-Path $dir 'store.json')) | ConvertFrom-Json).'worklog-reclaim'
+    $lines = @($value -split "`n")
+    Assert-Equal 'start' $lines[0] 'original content kept'
+    foreach ($t in 'p1', 'p2', 'p3') { Assert-Equal 1 @($lines | Where-Object { $_ -like "*| $t" }).Count "line from $t landed once" }
 }

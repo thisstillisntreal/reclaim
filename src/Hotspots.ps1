@@ -10,7 +10,16 @@ function Get-EntryValue($Entry, [string]$Name, $Default) {
 function Get-ReclaimHotspots([string]$Drive) {
     $cur = Get-LatestScan -Drive $Drive
     if ($null -eq $cur) { throw "No scan of $Drive yet." }
-    $prev = Get-LatestScan -Drive $Drive -Skip 1
+    # Baseline = newest earlier scan in the SAME mode: an elevated walk sees folders an unelevated
+    # one cannot, and that difference must never be reported as growth.
+    $prev = $null
+    $skippedOtherMode = 0
+    $all = @(Get-ReclaimScanFiles $Drive)
+    for ($k = 1; $k -lt $all.Count; $k++) {
+        $cand = [IO.File]::ReadAllText($all[$k].FullName) | ConvertFrom-Json
+        if ($cand.mode -eq $cur.mode) { $prev = $cand; break }
+        $skippedOtherMode++
+    }
     $scans = Get-ReclaimPath 'scans'
     $growth = @()
     $hours = $null
@@ -38,6 +47,7 @@ function Get-ReclaimHotspots([string]$Drive) {
         Recent48 = (& $window 48)
         Recent7d = (& $window 168)
         Known    = $known
+        SkippedOtherMode = $skippedOtherMode
     }
 }
 
@@ -47,7 +57,8 @@ function Write-ReclaimHotspotsReport($H) {
     Write-Host ("Hotspots on {0}   scan {1}   {2}" -f $c.root, $c.time, $c.mode) -ForegroundColor White
     Write-Host ("  Free now     {0} of {1}" -f (Format-Bytes $c.volume.free), (Format-Bytes $c.volume.total))
     if ($null -eq $H.Previous) {
-        Write-Host '  Growth       no earlier scan of this drive - this walk is the baseline; growth shows from the next run.' -ForegroundColor Yellow
+        $why = if ($H.SkippedOtherMode) { "no earlier $($c.mode) scan ($($H.SkippedOtherMode) scan(s) in the other mode ignored: different visibility is not growth)" } else { 'no earlier scan of this drive' }
+        Write-Host "  Growth       $why - this walk is the baseline; growth shows from the next run." -ForegroundColor Yellow
     } else {
         $p = $H.Previous
         $used = [long]$p.volume.free - [long]$c.volume.free

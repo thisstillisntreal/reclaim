@@ -832,6 +832,69 @@
       "action": "MOVE", "method": "Move to Y: from an elevated run, then look through it.",
       "command": "reclaim apply --only <id>      (elevated)",
       "processes": [], "hotspot": false
+    },
+    {
+      "id": "puppeteer", "name": "Puppeteer browsers", "kind": "dir",
+      "patterns": ["%USERS%\\.cache\\puppeteer"],
+      "creator": "Puppeteer (Node.js browser automation)",
+      "purpose": "Chrome / Chrome for Testing builds downloaded for Puppeteer scripts.",
+      "breaks": "Puppeteer scripts fail until a browser is downloaded again.",
+      "safety": "SAFE", "regenerates": "yes - npx puppeteer browsers install chrome",
+      "action": "DELETE", "method": "Quarantine.",
+      "command": "reclaim apply --only <id>      (restore later: npx puppeteer browsers install chrome)",
+      "processes": [], "hotspot": false
+    },
+    {
+      "id": "rustup-toolchains", "name": "Rust toolchains", "kind": "dir",
+      "patterns": ["%USERS%\\.rustup\\toolchains"],
+      "creator": "rustup (Rust installer)",
+      "purpose": "Installed Rust compilers and standard libraries, one folder per toolchain.",
+      "breaks": "cargo and rustc stop working for a removed toolchain.",
+      "safety": "KEEP", "regenerates": "yes - rustup toolchain install <name>",
+      "action": "CLEAR-FROM-APP", "method": "List with 'rustup toolchain list' and uninstall the ones you don't use.",
+      "command": "rustup toolchain uninstall <name>",
+      "processes": ["cargo", "rustc"], "hotspot": false
+    },
+    {
+      "id": "vscode-state-db", "name": "Editor global state database", "kind": "file",
+      "patterns": ["%USERS%\\AppData\\Roaming\\Cursor\\User\\globalStorage\\state.vscdb", "%USERS%\\AppData\\Roaming\\Code\\User\\globalStorage\\state.vscdb"],
+      "creator": "Cursor / VS Code",
+      "purpose": "SQLite database with the editor's global state: extension and UI state, and in Cursor the chat history.",
+      "breaks": "The editor loses that state (in Cursor: chat history).",
+      "safety": "KEEP", "regenerates": "an empty database is recreated; its contents are not",
+      "action": "CLEAR-FROM-APP", "method": "Shrink it from inside the editor (delete old chats and workspaces). Never touch it while the editor runs.",
+      "command": "", "processes": ["Cursor", "Code"], "hotspot": false
+    },
+    {
+      "id": "vscode-state-db-backup", "name": "Editor global state database backup", "kind": "file",
+      "patterns": ["%USERS%\\AppData\\Roaming\\Cursor\\User\\globalStorage\\state.vscdb.backup", "%USERS%\\AppData\\Roaming\\Code\\User\\globalStorage\\state.vscdb.backup"],
+      "creator": "Cursor / VS Code",
+      "purpose": "Backup copy of state.vscdb the editor keeps to recover from a corrupted state database.",
+      "breaks": "No recovery copy until the editor writes a new one.",
+      "safety": "SAFE-IF-CLOSED", "regenerates": "yes - written again by the editor",
+      "action": "DELETE", "method": "Quit the editor, then quarantine.",
+      "command": "reclaim apply --only <id>",
+      "processes": ["Cursor", "Code"], "hotspot": false
+    },
+    {
+      "id": "onedrive-settings", "name": "OneDrive sync databases", "kind": "dir",
+      "patterns": ["%USERS%\\AppData\\Local\\Microsoft\\OneDrive\\settings"],
+      "creator": "Microsoft OneDrive",
+      "purpose": "Sync engine state: which files are synced, where, and in which version.",
+      "breaks": "OneDrive has to rebuild its state and rescan every synced file.",
+      "safety": "KEEP", "regenerates": "yes - by a full OneDrive resync",
+      "action": "KEEP", "method": "Leave it. If it is corrupt, a OneDrive reset rebuilds it (onedrive.exe /reset).",
+      "command": "", "processes": ["OneDrive"], "hotspot": false
+    },
+    {
+      "id": "defender", "name": "Microsoft Defender data", "kind": "dir",
+      "patterns": ["?:\\ProgramData\\Microsoft\\Windows Defender"],
+      "creator": "Microsoft Defender Antivirus",
+      "purpose": "Definition updates, scan history, quarantined threats and support logs.",
+      "breaks": "Antivirus protection and history. The service locks these files.",
+      "safety": "KEEP", "regenerates": "yes - definitions download again",
+      "action": "KEEP", "method": "Leave it; Defender manages its own retention.",
+      "command": "", "processes": ["MsMpEng"], "hotspot": false
     }
   ]
 }
