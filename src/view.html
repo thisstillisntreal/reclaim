@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+  /* Self-contained: no external assets. Colors: validated reference palette (slots 1-3, all pairs). */
+  .viz-root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+    --g-act: #2a78d6; --g-you: #eb6834; --g-keep: #1baf7a; --g-unknown: #898781;
+    --tile-alpha: 0.26; --tile-alpha-hover: 0.45;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface-1: #1a1a19;
+      --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+      --g-act: #3987e5; --g-you: #d95926; --g-keep: #199e70; --g-unknown: #898781;
+      --tile-alpha: 0.34; --tile-alpha-hover: 0.55;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --g-act: #3987e5; --g-you: #d95926; --g-keep: #199e70; --g-unknown: #898781;
+    --tile-alpha: 0.34; --tile-alpha-hover: 0.55;
+  }
+  html, body { margin: 0; background: var(--page, #f9f9f7); }
+  .viz-root { background: var(--page); color: var(--text-primary); min-height: 100vh;
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 20px 24px 40px; box-sizing: border-box; }
+  h1 { font-size: 18px; margin: 0 0 4px; font-weight: 600; word-break: break-all; }
+  .meta { color: var(--text-secondary); font-size: 12px; margin: 0 0 10px; }
+  .reason { color: var(--text-secondary); margin: 0 0 12px; }
+  .bar-row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 0 0 10px; }
+  .crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 13px; }
+  .crumbs button { background: none; border: 0; padding: 2px 4px; color: var(--text-secondary); cursor: pointer; font: inherit; border-radius: 4px; }
+  .crumbs button:hover, .crumbs button:focus-visible { background: var(--ring); color: var(--text-primary); outline: none; }
+  .crumbs .here { color: var(--text-primary); font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-secondary); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .card { background: var(--surface-1); border-radius: 10px; box-shadow: 0 0 0 1px var(--ring); padding: 12px; }
+  #chart { width: 100%; height: min(68vh, 720px); display: block; }
+  #chart .tile rect { stroke: none; cursor: pointer; }
+  #chart .tile:focus { outline: none; }
+  #chart .tile:focus-visible rect.fill, #chart .tile:hover rect.fill { fill-opacity: var(--tile-alpha-hover); }
+  #chart .tile:focus-visible rect.edge { stroke: var(--text-primary); stroke-width: 2; }
+  #chart text { fill: var(--text-primary); font-size: 12px; pointer-events: none; }
+  #chart text.sub { fill: var(--text-secondary); font-size: 11px; }
+  #chart .axis { stroke: var(--axis); stroke-width: 1; }
+  .tip { position: fixed; pointer-events: none; z-index: 10; max-width: 380px; background: var(--surface-1);
+    color: var(--text-primary); border-radius: 8px; box-shadow: 0 0 0 1px var(--ring), 0 6px 20px rgba(0,0,0,0.18);
+    padding: 10px 12px; font-size: 12px; display: none; }
+  .tip b { font-size: 13px; word-break: break-all; }
+  .tip .k { color: var(--text-secondary); }
+  .tip .row { margin-top: 3px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--text-secondary); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td .sw { vertical-align: -1px; margin-right: 6px; }
+  details summary { cursor: pointer; color: var(--text-secondary); margin-top: 16px; }
+  .note { color: var(--text-muted); font-size: 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <h1 id="title">{{TITLE}}</h1>
+  <p class="meta" id="meta">Source: {{SOURCE}}</p>
+  <p class="reason" id="reason">{{REASON}}</p>
+  <div class="bar-row">
+    <nav class="crumbs" id="crumbs" aria-label="Folder path"></nav>
+  </div>
+  <div class="bar-row legend" id="legend" aria-label="Legend"></div>
+  <div class="card"><svg id="chart" role="group" aria-label="Disk usage chart"></svg></div>
+  <details open><summary>Table view (the same numbers as the chart)</summary><div id="table"></div></details>
+  <p class="note">Sizes are on-disk bytes measured by Reclaim (logical size in the tooltip and table). Colors group the six
+    safety ratings by what happens next; the exact rating is on each tile, in the tooltip and in the table.
+    Click or press Enter on a folder to open it; Escape goes up. Nothing on this page can change files.</p>
+  <div class="tip" id="tip" role="tooltip"></div>
+</div>
+<script id="reclaim-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("reclaim-data").textContent);
+  var NS = "http://www.w3.org/2000/svg";
+  var GROUP = { "SAFE": "act", "SAFE-IF-CLOSED": "act", "MOVE": "act", "ADMIN-ONLY": "you", "KEEP": "keep", "UNKNOWN": "unknown" };
+  var GROUP_LABEL = { act: "Reclaim can do it (SAFE, SAFE-IF-CLOSED, MOVE)", you: "Needs you (ADMIN-ONLY)", keep: "Hands off (KEEP)", unknown: "UNKNOWN (not in the knowledge base)" };
+  var svg = document.getElementById("chart"), tip = document.getElementById("tip");
+  var stack = [DATA.root];
+
+  function fmt(b) {
+    var a = Math.abs(b), u = [["TB", 1099511627776], ["GB", 1073741824], ["MB", 1048576], ["KB", 1024]];
+    for (var i = 0; i < u.length; i++) if (a >= u[i][1]) return (b / u[i][1]).toFixed(u[i][0] === "KB" ? 0 : (u[i][0] === "MB" ? 1 : 2)) + " " + u[i][0];
+    return b + " B";
+  }
+  function color(k) { return "var(--g-" + (GROUP[k] || "unknown") + ")"; }
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(NS, name);
+    for (var a in attrs) e.setAttribute(a, attrs[a]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function canOpen(n) { return n.t === "dir" && n.c && n.c.length > 0; }
+
+  function choose(node) {
+    var kids = node.c || [];
+    if (node.cn > DATA.maxTiles) return { chart: "bars", reason: "This folder has " + node.cn + " items (more than " + DATA.maxTiles + "), too many tiles to read, so the largest are shown as ranked bars instead of a treemap." };
+    if (kids.length && node.s > 0) {
+      var top = kids.reduce(function (a, b) { return b.s > a.s ? b : a; });
+      var share = top.s / node.s;
+      if (share >= DATA.dominantShare) return { chart: "bars", reason: "One item (" + top.n + ") holds " + Math.floor(share * 100) + "% of the space (85% or more), so a treemap would be one big box. Showing ranked bars instead." };
+    }
+    return { chart: "treemap", reason: "Treemap: tile area is on-disk size, color is the knowledge-base safety rating." };
+  }
+
+  // Squarified treemap (Bruls, Huizing, van Wijk).
+  function squarify(nodes, x, y, w, h) {
+    var total = 0, out = [];
+    nodes.forEach(function (n) { total += n.s; });
+    if (total <= 0 || w <= 0 || h <= 0) return out;
+    var scale = (w * h) / total, row = [], rx = x, ry = y, rw = w, rh = h;
+    function worst(r, side) {
+      var s = 0, mx = 0, mn = Infinity;
+      r.forEach(function (i) { s += i.a; mx = Math.max(mx, i.a); mn = Math.min(mn, i.a); });
+      return Math.max(side * side * mx / (s * s), (s * s) / (side * side * mn));
+    }
+    function lay(r) {
+      var s = 0; r.forEach(function (i) { s += i.a; });
+      if (rw >= rh) { var cw = s / rh, cy = ry; r.forEach(function (i) { var ch = i.a / cw; out.push({ n: i.n, x: rx, y: cy, w: cw, h: ch }); cy += ch; }); rx += cw; rw -= cw; }
+      else { var ch2 = s / rw, cx = rx; r.forEach(function (i) { var w2 = i.a / ch2; out.push({ n: i.n, x: cx, y: ry, w: w2, h: ch2 }); cx += w2; }); ry += ch2; rh -= ch2; }
+    }
+    nodes.filter(function (n) { return n.s > 0; }).sort(function (a, b) { return b.s - a.s; }).forEach(function (n) {
+      var it = { n: n, a: n.s * scale }, side = Math.min(rw, rh);
+      if (!row.length || worst(row.concat([it]), side) <= worst(row, side)) row.push(it);
+      else { lay(row); row = [it]; }
+    });
+    if (row.length) lay(row);
+    return out;
+  }
+
+  function showTip(n, parent, evt) {
+    var e = n.r ? DATA.kb[n.r] : null;
+    var share = parent && parent.s > 0 ? Math.round(n.s / parent.s * 1000) / 10 + "% of " + esc(parent.n) : "";
+    var h = "<b>" + esc(n.n) + "</b>";
+    h += '<div class="row">' + fmt(n.s) + ' on disk <span class="k">(logical ' + fmt(n.l) + ", " + (n.f || 0).toLocaleString() + " files" + (share ? "; " + share : "") + ")</span></div>";
+    h += '<div class="row"><span class="sw" style="background:' + color(n.k) + '"></span> ' + esc(n.k) + (e ? " - " + esc(e.name) : " - not in the knowledge base") + "</div>";
+    if (e) {
+      h += '<div class="row"><span class="k">Created by</span> ' + esc(e.creator) + "</div>";
+      h += '<div class="row"><span class="k">If it goes</span> ' + esc(e.breaks) + "</div>";
+      h += '<div class="row"><span class="k">Regenerates</span> ' + esc(e.regenerates) + "</div>";
+    }
+    if (n.t === "dir" || n.t === "file") h += '<div class="row k">reclaim explain "' + esc(n.p) + '"</div>';
+    if (canOpen(n)) h += '<div class="row k">Click or Enter to open</div>';
+    else if (n.t === "dir") h += '<div class="row k">Deeper levels: reclaim show "' + esc(n.p) + '"</div>';
+    tip.innerHTML = h;
+    tip.style.display = "block";
+    var r = evt && evt.clientX != null ? { x: evt.clientX, y: evt.clientY } : (function () { var b = evt.target.getBoundingClientRect(); return { x: b.left + 10, y: b.top + 10 }; })();
+    var tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.min(window.innerWidth - tw - 8, r.x + 14) + "px";
+    tip.style.top = Math.min(window.innerHeight - th - 8, r.y + 14) + "px";
+  }
+  function hideTip() { tip.style.display = "none"; }
+
+  function bindTile(g, n, parent) {
+    g.setAttribute("tabindex", "0");
+    g.setAttribute("role", canOpen(n) ? "button" : "img");
+    g.setAttribute("aria-label", n.n + ", " + fmt(n.s) + " on disk, " + n.k);
+    g.addEventListener("mousemove", function (ev) { showTip(n, parent, ev); });
+    g.addEventListener("mouseleave", hideTip);
+    g.addEventListener("focus", function (ev) { showTip(n, parent, ev); });
+    g.addEventListener("blur", hideTip);
+    function open() { if (canOpen(n)) { stack.push(n); hideTip(); render(); } }
+    g.addEventListener("click", open);
+    g.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+  }
+
+  function drawTreemap(node, W, H) {
+    squarify(node.c, 0, 0, W, H).forEach(function (t) {
+      var n = t.n, g = el("g", { "class": "tile" }, svg);
+      var x = t.x + 1, y = t.y + 1, w = Math.max(0, t.w - 2), h = Math.max(0, t.h - 2);   // 2px surface gap
+      el("rect", { "class": "fill", x: x, y: y, width: w, height: h, rx: Math.min(4, w / 2, h / 2), fill: color(n.k) }, g)
+        .style.fillOpacity = "var(--tile-alpha)";
+      el("rect", { "class": "edge", x: x, y: y, width: w, height: h, rx: Math.min(4, w / 2, h / 2), fill: "none" }, g);
+      el("rect", { x: x, y: y, width: Math.min(4, w), height: h, fill: color(n.k) }, g);   // identity stripe
+      if (w > 64 && h > 26) {
+        var max = Math.max(3, Math.floor((w - 14) / 7));
+        var name = n.n.length > max ? n.n.slice(0, max - 1) + "…" : n.n;
+        el("text", { x: x + 10, y: y + 17 }, g).textContent = name;
+        if (h > 44) el("text", { "class": "sub", x: x + 10, y: y + 33 }, g).textContent = fmt(n.s) + (w > 150 ? "  ·  " + n.k : "");
+      }
+      bindTile(g, n, node);
+    });
+  }
+
+  function drawBars(node, W) {
+    var kids = (node.c || []).slice().sort(function (a, b) { return b.s - a.s; }).slice(0, 40);
+    var labelW = Math.min(300, Math.max(140, W * 0.32)), valueW = 170, barMax = Math.max(40, W - labelW - valueW - 16);
+    var rowH = 26, barH = 14, max = kids.length ? kids[0].s : 1;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + Math.max(60, kids.length * rowH + 16));
+    svg.style.height = Math.max(60, kids.length * rowH + 16) + "px";
+    el("line", { "class": "axis", x1: labelW, x2: labelW, y1: 4, y2: kids.length * rowH + 8 }, svg);
+    kids.forEach(function (n, i) {
+      var g = el("g", { "class": "tile" }, svg), y = 8 + i * rowH;
+      var len = Math.max(2, barMax * n.s / max);
+      el("rect", { x: 0, y: y - 4, width: W, height: rowH, fill: "transparent" }, g);   // generous hit target
+      var name = n.n.length > 40 ? n.n.slice(0, 39) + "…" : n.n;
+      el("text", { x: labelW - 8, y: y + 11, "text-anchor": "end" }, g).textContent = name;
+      el("rect", { "class": "fill", x: labelW + 1, y: y, width: len, height: barH, rx: Math.min(4, len / 2), fill: color(n.k) }, g);
+      el("text", { "class": "sub", x: labelW + len + 8, y: y + 11 }, g).textContent = fmt(n.s) + "  ·  " + n.k;
+      bindTile(g, n, node);
+    });
+  }
+
+  function renderCrumbs() {
+    var nav = document.getElementById("crumbs");
+    nav.innerHTML = "";
+    stack.forEach(function (n, i) {
+      if (i) nav.appendChild(document.createTextNode("›"));
+      if (i === stack.length - 1) { var s = document.createElement("span"); s.className = "here"; s.textContent = n.n; nav.appendChild(s); }
+      else { var b = document.createElement("button"); b.textContent = n.n; b.onclick = function () { stack = stack.slice(0, i + 1); render(); }; nav.appendChild(b); }
+    });
+  }
+
+  function renderLegend() {
+    var lg = document.getElementById("legend");
+    lg.innerHTML = "";
+    ["act", "you", "keep", "unknown"].forEach(function (g) {
+      var s = document.createElement("span");
+      s.innerHTML = '<i class="sw" style="background:var(--g-' + g + ')"></i>' + esc(GROUP_LABEL[g]);
+      lg.appendChild(s);
+    });
+  }
+
+  function renderTable(node) {
+    var rows = (node.c || []).slice().sort(function (a, b) { return b.s - a.s; });
+    var h = "<table><thead><tr><th>Name</th><th>Safety</th><th>What</th><th class=num>On disk</th><th class=num>Logical</th><th class=num>Files</th></tr></thead><tbody>";
+    rows.forEach(function (n) {
+      var e = n.r ? DATA.kb[n.r] : null;
+      h += "<tr><td>" + esc(n.n) + "</td><td><span class=sw style=\"background:" + color(n.k) + "\"></span>" + esc(n.k) + "</td><td>" + esc(e ? e.name : "unknown") +
+        "</td><td class=num>" + fmt(n.s) + "</td><td class=num>" + fmt(n.l) + "</td><td class=num>" + (n.f || 0).toLocaleString() + "</td></tr>";
+    });
+    document.getElementById("table").innerHTML = h + "</tbody></table>";
+  }
+
+  function render() {
+    var node = stack[stack.length - 1];
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.removeAttribute("viewBox");
+    svg.style.height = "";
+    var W = Math.max(320, svg.clientWidth || 900), H = Math.max(240, svg.clientHeight || 560);
+    var pick = stack.length === 1 ? { chart: DATA.chart, reason: DATA.reason } : choose(node);
+    document.getElementById("reason").textContent = pick.reason;
+    document.getElementById("title").textContent = node.p || node.n;
+    document.getElementById("meta").textContent = "Source: " + DATA.source + "  ·  " + fmt(node.s) + " on disk (logical " + fmt(node.l) + ")  ·  " + DATA.mode + "  ·  generated " + DATA.generated +
+      (DATA.denied ? "  ·  " + DATA.denied + " denied folders not measured" : "");
+    if (!node.c || !node.c.length) {
+      el("text", { x: 16, y: 28 }, svg).textContent = "Nothing inside to chart at this level.";
+    } else if (pick.chart === "bars") drawBars(node, W);
+    else { svg.setAttribute("viewBox", "0 0 " + W + " " + H); drawTreemap(node, W, H); }
+    svg.setAttribute("data-chart", pick.chart);
+    renderCrumbs();
+    renderTable(node);
+  }
+
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && stack.length > 1) { stack.pop(); hideTip(); render(); } });
+  window.addEventListener("resize", function () { render(); });
+  renderLegend();
+  render();
+})();
+</script>
+</body>
+</html>
