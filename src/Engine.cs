@@ -330,6 +330,98 @@ namespace Reclaim
         public List<string> Errors = new List<string>();
     }
 
+    public class GrowthRec
+    {
+        public string Path;
+        public long Before;
+        public long After;
+        public long Delta;
+    }
+
+    public static class Growth
+    {
+        public static Dictionary<string, long> ReadTsv(string path)
+        {
+            Dictionary<string, long> d = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            foreach (string line in File.ReadLines(path))
+            {
+                int t1 = line.IndexOf('\t');
+                if (t1 <= 0) continue;
+                int t2 = line.IndexOf('\t', t1 + 1);
+                string num = t2 > 0 ? line.Substring(t1 + 1, t2 - t1 - 1) : line.Substring(t1 + 1);
+                long v;
+                if (long.TryParse(num, out v)) d[line.Substring(0, t1)] = v;
+            }
+            return d;
+        }
+
+        // Folders whose on-disk size grew, largest first. A folder is dropped when one of its
+        // descendants grew by at least 90% of the folder's own growth: the descendant is the hotspot.
+        public static List<GrowthRec> Compare(string prevTsv, string curTsv, int top)
+        {
+            Dictionary<string, long> prev = ReadTsv(prevTsv);
+            Dictionary<string, long> cur = ReadTsv(curTsv);
+            Dictionary<string, GrowthRec> grew = new Dictionary<string, GrowthRec>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, long> kv in cur)
+            {
+                long before;
+                prev.TryGetValue(kv.Key, out before);
+                if (kv.Value <= before) continue;
+                GrowthRec g = new GrowthRec();
+                g.Path = kv.Key; g.Before = before; g.After = kv.Value; g.Delta = kv.Value - before;
+                grew[kv.Key] = g;
+            }
+            Dictionary<string, long> maxChild = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            foreach (GrowthRec g in grew.Values)
+            {
+                for (string p = Parent(g.Path); p != null; p = Parent(p))
+                {
+                    long m;
+                    if (!maxChild.TryGetValue(p, out m) || g.Delta > m) maxChild[p] = g.Delta;
+                }
+            }
+            List<GrowthRec> list = new List<GrowthRec>();
+            foreach (GrowthRec g in grew.Values)
+            {
+                long m;
+                if (maxChild.TryGetValue(g.Path, out m) && m >= g.Delta * 0.9) continue;
+                list.Add(g);
+            }
+            list.Sort(delegate (GrowthRec a, GrowthRec b) { return b.Delta.CompareTo(a.Delta); });
+            if (list.Count > top) list.RemoveRange(top, list.Count - top);
+            return list;
+        }
+
+        static string Parent(string path)
+        {
+            string p = path.TrimEnd('\\');
+            int i = p.LastIndexOf('\\');
+            if (i < 0) return null;
+            if (i == 2 && p[1] == ':') return p.Substring(0, 3);
+            return p.Substring(0, i);
+        }
+    }
+
+    public static class ScanStore
+    {
+        // One row per folder >= minOnDisk: path, on-disk, logical, files, newest write (FILETIME UTC).
+        public static int WriteDirsTsv(ScanResult r, string path, long minOnDisk)
+        {
+            int n = 0;
+            using (StreamWriter w = new StreamWriter(path, false, new UTF8Encoding(false)))
+            {
+                foreach (DirNode d in r.Dirs)
+                {
+                    if (d.OnDisk < minOnDisk) continue;
+                    w.Write(d.Path); w.Write('\t'); w.Write(d.OnDisk); w.Write('\t'); w.Write(d.Logical);
+                    w.Write('\t'); w.Write(d.Files); w.Write('\t'); w.Write(d.NewestWrite); w.Write('\n');
+                    n++;
+                }
+            }
+            return n;
+        }
+    }
+
     public static class Walker
     {
         const uint ATTR_DIRECTORY = 0x10;
