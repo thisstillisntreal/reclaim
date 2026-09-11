@@ -64,6 +64,20 @@ Invoke-Test 'plan: actions come from the KB; UNKNOWN is KEEP; admin locations fl
     Assert-Equal ([long]0) ([long]$d.frees) 'same volume as the data root frees nothing now'
 }
 
+Invoke-Test 'plan: a files item directly inside a folder item is excluded file by file' {
+    $u = [IO.Path]::GetFileName($env:USERPROFILE)
+    $dl = "Z:\Users\$u\Downloads"
+    $scan = New-SyntheticScan 'Z' @(
+        @{ kind = 'dir'; path = $dl; ruleId = 'downloads'; onDisk = 4GB },
+        @{ kind = 'files'; path = $dl; ruleId = 'vhd-generic'; onDisk = 20GB }
+    )
+    $scan.items[1].members = @("$dl\a.vhdx", "$dl\b.vhdx")
+    $e = @(ConvertTo-ReclaimPlanEntries -Scan $scan | Where-Object { $_.ruleId -eq 'downloads' })[0]
+    Assert-True (@($e.exclude) -contains "$dl\a.vhdx") 'member a excluded'
+    Assert-True (@($e.exclude) -contains "$dl\b.vhdx") 'member b excluded'
+    Assert-True (-not (@($e.exclude) -contains $dl)) 'the folder itself is not excluded'
+}
+
 Invoke-Test 'plan: anything under a configured protected path is KEEP' {
     $cfg = Get-ReclaimConfig
     $cfg | Add-Member -NotePropertyName protectedPaths -NotePropertyValue @('Z:\Vault') -Force

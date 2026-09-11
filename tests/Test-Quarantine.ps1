@@ -15,7 +15,10 @@ $kbExtra = Join-Path $script:TestRunRoot 'kb-extra.json'
     "action": "DELETE", "method": "test", "command": "", "processes": [], "hotspot": false },
   { "id": "test-move", "name": "test MOVE", "kind": "dir", "patterns": ["**\\reclaim-test-move"],
     "creator": "test", "purpose": "test", "breaks": "nothing", "safety": "MOVE", "regenerates": "no",
-    "action": "MOVE", "method": "test", "command": "", "processes": [], "hotspot": false }
+    "action": "MOVE", "method": "test", "command": "", "processes": [], "hotspot": false },
+  { "id": "test-logs", "name": "test log files", "kind": "file", "patterns": ["**\\reclaim-test-logs\\*.rlog"],
+    "creator": "test", "purpose": "test", "breaks": "nothing", "safety": "SAFE", "regenerates": "yes",
+    "action": "DELETE", "method": "test", "command": "", "processes": [], "hotspot": false }
 ] }
 '@)
 (Get-ReclaimConfig) | Add-Member -NotePropertyName kbExtra -NotePropertyValue $kbExtra -Force
@@ -179,6 +182,68 @@ Invoke-Test 'apply: refuses paths whose KB rule no longer matches, and anything 
     $res2 = @(Invoke-ReclaimApply -Only @('T-007') -Confirm $yes -Plan $plan2)
     Assert-Equal 'refused' $res2[0].Status 'data root is protected'
     Assert-True (Test-Path -LiteralPath "$inside\x.bin") 'still there'
+}
+
+Invoke-Test 'apply: an interrupted move still leaves a receipt, and undo restores what moved' {
+    $dir = New-FixtureDir 'qi' 'reclaim-test-safe' 3
+    $before = Get-TreeHashes $dir
+    $saved = $script:ReclaimMoveAll
+    $script:ReclaimMoveAll = {
+        param($Files, $DestRoot, $Tsv)
+        $one = New-Object 'System.Collections.Generic.List[Reclaim.FileRec]'
+        $one.Add($Files[0])
+        [void][Reclaim.Mover]::MoveAll($one, $DestRoot, $Tsv)
+        throw 'simulated crash mid-move'
+    }
+    try {
+        $res = @(Invoke-ReclaimApply -Only @('T-030') -Confirm $yes -Plan (New-TestPlan @(New-PlanEntry 'T-030' $dir 'test-safe')))
+    } finally { $script:ReclaimMoveAll = $saved }
+    Assert-Equal 'interrupted' $res[0].Status "status ($($res[0].Reason))"
+    $rc = Get-ReclaimReceipt $res[0].ReceiptId
+    Assert-Equal 'interrupted' $rc.status 'receipt records the interruption'
+    $u = Invoke-ReclaimUndo -ReceiptId $res[0].ReceiptId
+    Assert-Equal 1 $u.Restored 'the one moved file comes back'
+    Assert-Equal $before (Get-TreeHashes $dir) 'tree identical again'
+}
+
+Invoke-Test 'apply: nested items that appeared after the plan are excluded too (re-derived live)' {
+    $root = New-TestDir 'qj'
+    $nm = "$root\proj\node_modules"
+    [void](New-Item -ItemType Directory -Force -Path "$nm\pkg")
+    New-FixtureFile "$nm\a.js" 1048576 3
+    $plan = New-TestPlan @(New-PlanEntry 'T-031' $nm 'node-modules')
+    New-FixtureFile "$nm\pkg\late.iso" 1048576 9
+    $res = @(Invoke-ReclaimApply -Only @('T-031') -Confirm $yes -Plan $plan)
+    Assert-Equal 'ok' $res[0].Status "apply ($($res[0].Reason))"
+    Assert-True (Test-Path -LiteralPath "$nm\pkg\late.iso") 'nested item that appeared later is left for its own decision'
+    Assert-True (-not (Test-Path -LiteralPath "$nm\a.js")) 'the rest moved'
+}
+
+Invoke-Test 'apply: a files-kind item moves only its matching members' {
+    $dir = New-TestDir 'qk\reclaim-test-logs'
+    New-FixtureFile "$dir\a.rlog" 5000 1
+    New-FixtureFile "$dir\b.rlog" 6000 2
+    New-FixtureFile "$dir\keep.txt" 7000 3
+    $pe = New-PlanEntry 'T-032' $dir 'test-logs'
+    $pe.kind = 'files'
+    $pe.members = @("$dir\a.rlog", "$dir\b.rlog")
+    $res = @(Invoke-ReclaimApply -Only @('T-032') -Confirm $yes -Plan (New-TestPlan @($pe)))
+    Assert-Equal 'ok' $res[0].Status "apply ($($res[0].Reason))"
+    Assert-True (-not (Test-Path -LiteralPath "$dir\a.rlog")) 'member a moved'
+    Assert-True (-not (Test-Path -LiteralPath "$dir\b.rlog")) 'member b moved'
+    Assert-True (Test-Path -LiteralPath "$dir\keep.txt") 'non-member untouched'
+}
+
+Invoke-Test 'apply: folders listed in config protectedPaths are never moved' {
+    $dir = New-FixtureDir 'qh' 'reclaim-test-safe' 1
+    $cfg = Get-ReclaimConfig
+    $cfg | Add-Member -NotePropertyName protectedPaths -NotePropertyValue @((Split-Path -Parent $dir)) -Force
+    try {
+        $res = @(Invoke-ReclaimApply -Only @('T-020') -Confirm $yes -Plan (New-TestPlan @(New-PlanEntry 'T-020' $dir 'test-safe')))
+        Assert-Equal 'refused' $res[0].Status 'protected by config'
+        Assert-True ($res[0].Reason -like '*protected*') "reason: $($res[0].Reason)"
+        Assert-True (Test-Path -LiteralPath "$dir\f1.bin") 'untouched'
+    } finally { $cfg.protectedPaths = @() }
 }
 
 Invoke-Test 'purge: lists unpinned quarantine past its date; --execute refuses without a person present' {

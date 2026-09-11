@@ -31,6 +31,7 @@ namespace Reclaim
         public int Skipped;
         public int Locked;
         public int Conflicts;
+        public int HashChanged;
         public long Bytes;
         public long OnDisk;
     }
@@ -330,7 +331,11 @@ namespace Reclaim
                 {
                     s.Files++;
                     MoveResult m = MoveFile(f.Path, DestFor(destRoot, f.Path));
-                    if (m.Status == "ok") { s.Moved++; s.Bytes += m.Bytes; s.OnDisk += f.OnDisk; }
+                    if (m.Status == "ok" || m.Status == "moved-hash-changed")
+                    {
+                        s.Moved++; s.Bytes += m.Bytes; s.OnDisk += f.OnDisk;
+                        if (m.Status == "moved-hash-changed") s.HashChanged++;   // it moved; the file changed mid-move
+                    }
                     else if (m.Status == "copied-source-locked") s.Locked++;
                     else if (m.Status.StartsWith("skipped")) s.Skipped++;
                     else s.Failed++;

@@ -3,6 +3,53 @@
 # from the knowledge base and the live path - the plan file only selects items. The only file
 # operation is a hash-verified move (src\Mover.cs) into <dataRoot>\quarantine or <dataRoot>\moved.
 
+# The single call that moves files. A variable so tests can simulate an interruption mid-move.
+$script:ReclaimMoveAll = { param($Files, $DestRoot, $Tsv) [Reclaim.Mover]::MoveAll($Files, $DestRoot, $Tsv) }
+
+# Counts rebuilt from the per-file manifest (used when a move run was interrupted).
+function Get-ReclaimTsvSummary([string]$Tsv) {
+    $s = New-Object Reclaim.MoveSummary
+    if (-not (Test-Path -LiteralPath $Tsv)) { return $s }
+    $first = $true
+    foreach ($line in [IO.File]::ReadLines($Tsv)) {
+        if ($first) { $first = $false; continue }
+        $c = $line.Split("`t")
+        if ($c.Length -lt 6) { continue }
+        $s.Files++
+        switch -Regex ($c[0]) {
+            '^(ok|moved-hash-changed)$' {
+                $s.Moved++; $s.Bytes += [long]$c[2]; $s.OnDisk += [long]$c[3]
+                if ($c[0] -eq 'moved-hash-changed') { $s.HashChanged++ }
+            }
+            '^copied-source-locked$' { $s.Locked++ }
+            '^skipped' { $s.Skipped++ }
+            default { $s.Failed++ }
+        }
+    }
+    return $s
+}
+
+# Nested knowledge-base items keep their own decision. Recomputed from the folder as it is now
+# (things may have appeared since the plan), plus whatever the plan excluded. 'files' items are
+# excluded file by file, never as a whole folder.
+function Get-ReclaimLiveExcludes($Pe) {
+    $cfg = Get-ReclaimConfig
+    $o = New-ReclaimScanOptions
+    $o.Progress = $false
+    $r = [Reclaim.Walker]::Scan($Pe.path, $o)
+    $items = [Reclaim.Classifier]::Classify($r, (Get-ReclaimKb).Rules, [long]$cfg.dirUnknownMinBytes, [long]$cfg.fileUnknownMinBytes)
+    $root = $Pe.path.TrimEnd('\')
+    $set = New-Object 'System.Collections.Generic.HashSet[string]' -ArgumentList ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($it in $items) {
+        if (-not $it.RuleId) { continue }
+        if ($it.Kind -eq 'files') { foreach ($m in $it.Members) { [void]$set.Add($m) }; continue }
+        if ($it.Path.TrimEnd('\') -ieq $root) { continue }
+        [void]$set.Add($it.Path)
+    }
+    foreach ($x in @($Pe.exclude)) { if ($x) { [void]$set.Add([string]$x) } }
+    return @($set)
+}
+
 function New-ReclaimReceiptId {
     return ('R-{0}-{1}' -f (Get-Date).ToString('yyyyMMdd-HHmmss'), [guid]::NewGuid().ToString('N').Substring(0, 6))
 }
@@ -60,7 +107,9 @@ function Get-ReclaimApplyFiles($Pe, $Entry) {
             if (-not [IO.Directory]::Exists($Pe.path)) { $info.Mismatch = 'gone'; break }
             $m = Find-ReclaimRule $Pe.path $false
             if ($m.By -ne 'exact' -or $m.Rule.Id -ne $Pe.ruleId) { $info.Mismatch = 'rule'; break }
-            $fl = [Reclaim.Mover]::ListFiles($Pe.path, [string[]]@($Pe.exclude | Where-Object { $_ }))
+            $ex = @(Get-ReclaimLiveExcludes $Pe)
+            $info.Excluded = $ex.Count
+            $fl = [Reclaim.Mover]::ListFiles($Pe.path, [string[]]$ex)
             foreach ($f in $fl.Files) { $list.Add($f) }
             $info.Skipped = @($fl.Skipped); $info.Denied = @($fl.Denied)
         }
@@ -110,6 +159,7 @@ function Invoke-ReclaimApplyEntry($Pe, [bool]$YesToSafe, [scriptblock]$Confirm, 
         Write-Host "  NOT ATTEMPTED: needs an elevated shell. Open Windows PowerShell as Administrator and run: $cmd" -ForegroundColor Magenta
         return New-ApplyResult $Pe 'needs-admin' "elevated shell required: $cmd"
     }
+    if ($null -eq $Running) { $Running = Get-ReclaimRunningProcessNames }   # per item, just before acting
     $busy = @(@($entry.processes) | Where-Object { $_ -and $Running.ContainsKey(([string]$_).ToLowerInvariant()) })
     if ($busy.Count) {
         Write-Host "  REFUSED: close $($busy -join ', ') first ($($entry.safety))." -ForegroundColor Yellow
@@ -156,24 +206,36 @@ function Invoke-ReclaimApplyEntry($Pe, [bool]$YesToSafe, [scriptblock]$Confirm, 
     $freeBefore = [ordered]@{}; foreach ($d in $drives) { $freeBefore[$d] = [Reclaim.Native]::FreeBytes("$($d):\") }
     $toMove = New-Object 'System.Collections.Generic.List[Reclaim.FileRec]'
     foreach ($f in $files.Files) { if (-not [Reclaim.Walker]::IsPlaceholder($f.Attributes)) { $toMove.Add($f) } }
-    $sum = [Reclaim.Mover]::MoveAll($toMove, (Join-Path $dest 'files'), $tsv)
-    $freeAfter = [ordered]@{}; foreach ($d in $drives) { $freeAfter[$d] = [Reclaim.Native]::FreeBytes("$($d):\") }
-    $status = if ($sum.Moved -eq $sum.Files) { 'ok' } elseif ($sum.Moved -gt 0) { 'partial' } else { 'failed' }
-
     $receipt = [ordered]@{
         id = $rid; created = (Get-Date).ToString('s'); host = $cfg.hostName; mode = (Get-ReclaimMode)
-        action = $(if ($isMove) { 'move' } else { 'quarantine' }); status = $status
+        action = $(if ($isMove) { 'move' } else { 'quarantine' }); status = 'in-progress'; error = $null
         item = [ordered]@{ planId = $Pe.id; planStamp = $PlanStamp; path = $Pe.path; kind = $Pe.kind; ruleId = $Pe.ruleId; name = $entry.name; safety = $entry.safety }
         explanation = [ordered]@{ what = $entry.name; creator = $entry.creator; purpose = $entry.purpose; breaks = $entry.breaks; regenerates = $entry.regenerates; method = $entry.method }
         dest = $dest; filesRoot = (Join-Path $dest 'files'); manifestTsv = $tsv
-        counts = [ordered]@{ files = $sum.Files; moved = $sum.Moved; failed = $sum.Failed; skipped = $sum.Skipped; locked = $sum.Locked; excludedItems = $files.Excluded; placeholders = $placeholders }
-        bytes = [ordered]@{ logical = $sum.Bytes; onDisk = $sum.OnDisk }
-        free = [ordered]@{ before = $freeBefore; after = $freeAfter }
+        counts = [ordered]@{ files = $toMove.Count; moved = 0; failed = 0; skipped = 0; locked = 0; hashChanged = 0; excludedItems = $files.Excluded; placeholders = $placeholders }
+        bytes = [ordered]@{ logical = 0; onDisk = 0 }
+        free = [ordered]@{ before = $freeBefore; after = $null }
         purgeAfter = $(if ($isMove) { $null } else { (Get-Date).AddDays([int]$cfg.purgeDays).ToString('s') })
         undo = "reclaim undo $rid"
     }
+    # Written before the first file moves, so an interrupted run still leaves an undo-able receipt.
     Write-ReclaimJson (Get-ReclaimReceiptPath $rid) $receipt
     Write-ReclaimJson (Join-Path $dest 'manifest.json') $receipt
+
+    $interrupted = $null
+    try { $sum = & $script:ReclaimMoveAll $toMove (Join-Path $dest 'files') $tsv }
+    catch { $interrupted = $_.Exception.Message; $sum = Get-ReclaimTsvSummary $tsv }
+    $freeAfter = [ordered]@{}; foreach ($d in $drives) { $freeAfter[$d] = [Reclaim.Native]::FreeBytes("$($d):\") }
+    $status = if ($interrupted) { 'interrupted' } elseif ($sum.Moved -eq $toMove.Count) { 'ok' } elseif ($sum.Moved -gt 0) { 'partial' } else { 'failed' }
+    $receipt.status = $status
+    $receipt.error = $interrupted
+    $receipt.counts = [ordered]@{ files = $toMove.Count; moved = $sum.Moved; failed = $sum.Failed; skipped = $sum.Skipped; locked = $sum.Locked; hashChanged = $sum.HashChanged; excludedItems = $files.Excluded; placeholders = $placeholders }
+    $receipt.bytes = [ordered]@{ logical = $sum.Bytes; onDisk = $sum.OnDisk }
+    $receipt.free.after = $freeAfter
+    Write-ReclaimJson (Get-ReclaimReceiptPath $rid) $receipt
+    Write-ReclaimJson (Join-Path $dest 'manifest.json') $receipt
+    if ($interrupted) { Write-Host "  INTERRUPTED: $interrupted - $($sum.Moved) file(s) had moved; the receipt lists them and undo works." -ForegroundColor Red }
+    if ($sum.HashChanged) { Write-Host "  $($sum.HashChanged) file(s) changed while being moved (they moved; hashes recorded after the move)." -ForegroundColor Yellow }
     Write-ReclaimLog ("apply {0} {1} {2}: {3}/{4} files, {5} on disk -> {6}" -f $rid, $receipt.action, $status, $sum.Moved, $sum.Files, (Format-Bytes $sum.OnDisk), $dest)
 
     $src = $Pe.path.Substring(0, 1).ToUpperInvariant()
@@ -198,7 +260,6 @@ function Invoke-ReclaimApply {
     if ($null -eq $Plan) { $Plan = Get-LatestPlan }
     if ($null -eq $Plan) { throw 'No plan yet. Run: reclaim plan' }
     if ($null -eq $Elevated) { $Elevated = Test-ReclaimElevated }
-    if ($null -eq $Running) { $Running = Get-ReclaimRunningProcessNames }
     if ($null -eq $Confirm) {
         $interactive = -not [Console]::IsInputRedirected
         $Confirm = {
@@ -334,7 +395,12 @@ function Invoke-ReclaimPurge([switch]$Execute, [bool]$Interactive = (-not [Conso
     $done = @()
     foreach ($x in $c) {
         if (-not $x.dest.StartsWith($qroot, [StringComparison]::OrdinalIgnoreCase)) { Write-Host "  skipped $($x.id): not under $qroot" -ForegroundColor Red; continue }
-        Remove-Item -LiteralPath $x.dest -Recurse -Force
+        try { Remove-Item -LiteralPath $x.dest -Recurse -Force -ErrorAction Stop } catch { }
+        if (Test-Path -LiteralPath $x.dest) {
+            Write-Host "  FAILED to purge $($x.id): some files could not be deleted (in use?). Not marked purged; undo still works for what remains." -ForegroundColor Red
+            Write-ReclaimLog "purge FAILED $($x.id) $($x.dest)"
+            continue
+        }
         Write-ReclaimJson (Join-Path (Get-ReclaimPath 'receipts') "$($x.id).purged.json") ([ordered]@{ receiptId = $x.id; purgedAt = (Get-Date).ToString('s'); onDisk = $x.onDisk })
         Write-ReclaimLog "purge $($x.id) $($x.dest)"
         $done += $x.id

@@ -57,7 +57,11 @@ function ConvertTo-ReclaimPlanEntries($Scan) {
         $exclude = @()
         if ($it.kind -eq 'dir') {
             $prefix = $it.path.TrimEnd('\') + '\'
-            $exclude = @($items | Where-Object { $_.path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { $_.path })
+            $self = $it
+            $exclude = @($items | Where-Object {
+                    $_.id -ne $self.id -and ($_.path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -or
+                        ($_.kind -eq 'files' -and $_.path.TrimEnd('\') -ieq $self.path.TrimEnd('\')))
+                } | ForEach-Object { if ($_.kind -eq 'files') { @($_.members) } else { $_.path } })
         }
 
         [pscustomobject][ordered]@{
