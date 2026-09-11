@@ -134,6 +134,10 @@ view has no external references. Fixtures go under `<repo drive>\_reclaim-testru
 ## Limitations
 
 - Local fixed NTFS drives only; network and removable drives are not scanned.
+- Walk speed is bound by the disk: an SSD lists thousands of folders per second, a spinning disk with
+  millions of files and several antivirus filter drivers can drop to ~100 folders per second, so a full
+  walk of such a drive can take an hour. `hotspots` walks every fixed drive by default; name one drive
+  (`reclaim hotspots C:`) when you only care about one.
 - Alternate data streams are not measured.
 - `moved\` items are not purge candidates; move them back with undo or manage them yourself.
 - Purge is the one permanent action and needs you at the keyboard.

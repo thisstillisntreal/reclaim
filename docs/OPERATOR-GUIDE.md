@@ -20,6 +20,14 @@ what to do.
    one with its full explanation and the live on-disk size. Or pick items: `reclaim apply --only C-012,C-016`.
 5. `reclaim status` - free space per drive (measured), quarantine size, what becomes purge-eligible.
 
+## How long a walk takes
+
+SSDs: a few minutes for a full system drive. Spinning disks with millions of files are seek-bound
+(plus one open per folder through every antivirus filter driver): ~100 folders per second is normal
+there, so a full walk can take an hour. `reclaim hotspots` with no drive walks every fixed drive;
+pass the drive you care about (`reclaim hotspots C:`) for a quick answer. In an interactive window the
+walk shows a live folder/file counter.
+
 ## Reading the scan report
 
 - **Measured** - on-disk bytes found by the walk (logical beside it).
