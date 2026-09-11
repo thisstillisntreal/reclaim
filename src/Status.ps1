@@ -43,7 +43,9 @@ function Show-ReclaimStatus {
         $color = if ($d.Free -lt 0.1 * $d.Total) { 'Yellow' } else { 'Gray' }
         Write-Host ('    {0}:  [{1}] {2,10} free of {3}' -f $d.Drive, $bar, (Format-Bytes $d.Free), (Format-Bytes $d.Total)) -ForegroundColor $color
     }
-    Write-Host ('  Quarantine    {0} on disk in {1:N0} files  ({2})' -f (Format-Bytes $s.QuarantineOnDisk), $s.QuarantineFiles, (Join-Path $cfg.dataRoot 'quarantine'))
+    $qFiles = 0; foreach ($x in @(Get-ReclaimQuarantineEntries)) { $qFiles += [int]$x.files }
+    Write-Host ('  Quarantine    {0} on disk, measured (includes manifests); {1:N0} quarantined file(s) in {2} receipt(s)  ({3})' -f
+        (Format-Bytes $s.QuarantineOnDisk), $qFiles, @(Get-ReclaimQuarantineEntries).Count, (Join-Path $cfg.dataRoot 'quarantine'))
     Write-Host ('  Moved         {0} on disk in {1:N0} files  ({2})' -f (Format-Bytes $s.MovedOnDisk), $s.MovedFiles, (Join-Path $cfg.dataRoot 'moved'))
     Write-Host ("  Purge         never automatic. {0} entr(ies) eligible now, {1} pinned. List: reclaim purge   Delete (owner only): reclaim purge --execute" -f $s.EligibleNow, $s.Pinned)
     if (@($s.NextPurge).Count) {

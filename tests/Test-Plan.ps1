@@ -78,6 +78,31 @@ Invoke-Test 'plan: a files item directly inside a folder item is excluded file b
     Assert-True (-not (@($e.exclude) -contains $dl)) 'the folder itself is not excluded'
 }
 
+Invoke-Test 'plan: nothing inside a OneDrive folder is moved (it would be deleted from OneDrive everywhere)' {
+    $u = [IO.Path]::GetFileName($env:USERPROFILE)
+    $scan = New-SyntheticScan 'Z' @(
+        @{ kind = 'dir'; path = "Z:\Users\$u\OneDrive\proj\node_modules"; ruleId = 'node-modules'; onDisk = 1GB },
+        @{ kind = 'dir'; path = "Z:\Users\$u\OneDrive - Contoso\site\node_modules"; ruleId = 'node-modules'; onDisk = 1GB }
+    )
+    foreach ($e in @(ConvertTo-ReclaimPlanEntries -Scan $scan)) {
+        Assert-Equal 'KEEP' $e.action "$($e.path) -> KEEP"
+        Assert-True ($e.reason -like '*OneDrive*') "reason: $($e.reason)"
+    }
+}
+
+Invoke-Test 'plan: by-hand total counts only what the owning program can actually give back' {
+    $u = [IO.Path]::GetFileName($env:USERPROFILE)
+    $scan = New-SyntheticScan 'Z' @(
+        @{ kind = 'file'; path = 'Z:\pagefile.sys'; ruleId = 'pagefile'; onDisk = 8GB },
+        @{ kind = 'dir'; path = 'Z:\Program Files'; ruleId = 'program-files'; onDisk = 16GB },
+        @{ kind = 'dir'; path = "Z:\Users\$u\OneDrive"; ruleId = 'onedrive'; onDisk = 30GB },
+        @{ kind = 'dir'; path = "Z:\Users\$u\AppData\Local\npm-cache"; ruleId = 'npm-cache'; onDisk = 3GB }
+    )
+    $t = Get-ReclaimPlanTotals @(ConvertTo-ReclaimPlanEntries -Scan $scan)
+    Assert-Equal ([long]8GB) ([long]$t.byHand) 'pagefile counts; KEEP-rated Program Files and OneDrive do not'
+    Assert-Equal ([long]3GB) ([long]$t.byApply) 'apply total = quarantine + move'
+}
+
 Invoke-Test 'plan: anything under a configured protected path is KEEP' {
     $cfg = Get-ReclaimConfig
     $cfg | Add-Member -NotePropertyName protectedPaths -NotePropertyValue @('Z:\Vault') -Force

@@ -75,6 +75,21 @@ function ConvertTo-ReclaimPlanEntries($Scan) {
     }
 }
 
+# Totals per action plus the two headline numbers: what apply can free now, and what the owning
+# programs could give back by hand (DISABLE / CLEAR-FROM-APP entries that are not rated KEEP -
+# uninstalling software or emptying OneDrive is not counted as reclaimable space).
+function Get-ReclaimPlanTotals($Entries) {
+    $all = @($Entries)
+    $totals = [ordered]@{}
+    foreach ($a in 'DELETE', 'MOVE', 'DISABLE', 'CLEAR-FROM-APP', 'KEEP') {
+        $g = @($all | Where-Object { $_.action -eq $a })
+        $totals[$a] = [ordered]@{ count = $g.Count; onDisk = (Get-ReclaimSum $g 'onDisk'); frees = (Get-ReclaimSum $g 'frees') }
+    }
+    $totals['byApply'] = [long]$totals['DELETE'].frees + [long]$totals['MOVE'].frees
+    $totals['byHand'] = Get-ReclaimSum @($all | Where-Object { $_.action -in 'DISABLE', 'CLEAR-FROM-APP' -and $_.safety -ne 'KEEP' }) 'onDisk'
+    return $totals
+}
+
 function New-ReclaimPlan([string[]]$Drives) {
     $cfg = Get-ReclaimConfig
     $entries = New-Object System.Collections.ArrayList
@@ -87,15 +102,7 @@ function New-ReclaimPlan([string[]]$Drives) {
     }
     $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss-fff')
     $file = Join-Path (Get-ReclaimPath 'plans') "plan-$stamp.json"
-    $totals = [ordered]@{}
-    foreach ($a in 'DELETE', 'MOVE', 'DISABLE', 'CLEAR-FROM-APP', 'KEEP') {
-        $g = @($entries | Where-Object { $_.action -eq $a })
-        $totals[$a] = [ordered]@{
-            count = $g.Count
-            onDisk = (Get-ReclaimSum $g 'onDisk')
-            frees = (Get-ReclaimSum $g 'frees')
-        }
-    }
+    $totals = Get-ReclaimPlanTotals $entries
     $plan = [ordered]@{
         version = 1; kind = 'plan'; stamp = $stamp; time = (Get-Date).ToString('s'); mode = (Get-ReclaimMode)
         host = $cfg.hostName; scans = @($scans); totals = $totals; entries = @($entries); file = $file
@@ -149,10 +156,10 @@ function Write-ReclaimPlanReport($Plan) {
     foreach ($r in ($keep | Select-Object -First 8)) {
         Write-Host ('  {0,-7} {1,10}  {2,-14} {3} -> {4}' -f $r.id, (Format-Bytes $r.onDisk), $r.safety, $r.name, $r.path) -ForegroundColor (Get-SafetyColor $r.safety)
     }
-    $now = [long]$Plan.totals.DELETE.frees + [long]$Plan.totals.MOVE.frees
-    $byHand = [long]$Plan.totals.DISABLE.onDisk + [long]$Plan.totals.'CLEAR-FROM-APP'.onDisk
+    $now = [long]$Plan.totals.byApply
+    $byHand = [long]$Plan.totals.byHand
     Write-Host ''
-    Write-Host ("Reclaimable by apply (quarantine + move): {0}.   By hand (DISABLE / CLEAR-FROM-APP): up to {1}." -f (Format-Bytes $now), (Format-Bytes $byHand)) -ForegroundColor White
+    Write-Host ("Reclaimable by apply (quarantine + move): {0}.   By hand in the owning programs (DISABLE / CLEAR-FROM-APP, KEEP-rated items not counted): up to {1}." -f (Format-Bytes $now), (Format-Bytes $byHand)) -ForegroundColor White
     Write-Host 'Next: reclaim apply --only <id,id>   |   reclaim apply --yes-to-safe   (auto-approves SAFE only; every other item is asked)' -ForegroundColor DarkGray
     Write-Host "Saved: $($Plan.file)" -ForegroundColor DarkGray
 }

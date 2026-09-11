@@ -56,6 +56,30 @@ Invoke-Test 'kb: shipped knowledge base loads and covers the required seeds' {
     Assert-True ($kb.Rules.Count -ge $kb.Entries.Count) 'one rule per pattern'
 }
 
+Invoke-Test 'kb: only project node_modules are disposable; app-bundled and global ones are KEEP' {
+    $expect = @(
+        @('Q:\work\site\node_modules', 'node-modules'),
+        @('C:\Users\alice\AppData\Local\npm-cache\_npx\ab12\node_modules', 'node-modules'),
+        @('C:\Program Files\Common Files\Adobe\Libraries\js\node_modules', 'node-modules-app'),
+        @('C:\Program Files (x86)\Tool\node_modules', 'node-modules-app'),
+        @('C:\Users\alice\AppData\Local\Programs\cursor\resources\app\node_modules', 'node-modules-app'),
+        @('Z:\Apps\Thing\resources\app\node_modules', 'node-modules-app'),
+        @('Z:\Apps\Thing\resources\app\node_modules\dep\node_modules', 'node-modules-app'),
+        @('C:\Users\alice\.vscode\extensions\x.y-1.0\node_modules', 'node-modules-app'),
+        @('C:\Users\alice\AppData\Roaming\npm\node_modules', 'node-modules-global'),
+        @('C:\Users\alice\AppData\Local\nvm\v24.18.0\node_modules', 'node-modules-global'),
+        @('C:\nvm4w\nodejs\node_modules', 'node-modules-global'),
+        @('C:\Program Files\nodejs\node_modules', 'node-modules-global')
+    )
+    foreach ($x in $expect) {
+        $m = Find-ReclaimRule $x[0] $false
+        Assert-Equal $x[1] $m.Rule.Id $x[0]
+        Assert-Equal 'exact' $m.By "$($x[0]) matched directly"
+    }
+    Assert-Equal 'KEEP' (Get-ReclaimEntry 'node-modules-app').safety 'app-bundled is KEEP'
+    Assert-Equal 'KEEP' (Get-ReclaimEntry 'node-modules-global').safety 'global is KEEP'
+}
+
 function New-TestRules {
     $entries = @(
         [pscustomobject]@{ id = 't-cache'; kind = 'dir';  patterns = @('**\Cache') },

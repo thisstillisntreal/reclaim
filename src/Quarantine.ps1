@@ -66,6 +66,41 @@ function Write-ReclaimJson([string]$Path, $Object) {
     [IO.File]::WriteAllText($Path, ($Object | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
 }
 
+$script:ReclaimOneDriveSystemRoots = $null
+
+# OneDrive sync roots: registered mount points, the OneDrive environment variables, and config
+# oneDriveRoots. Moving a file out of one deletes it from OneDrive on every device.
+function Get-ReclaimOneDriveRoots {
+    if ($null -eq $script:ReclaimOneDriveSystemRoots) {
+        $found = New-Object System.Collections.ArrayList
+        try {
+            foreach ($k in @(Get-ChildItem -LiteralPath 'HKCU:\Software\SyncEngines\Providers\OneDrive' -ErrorAction Stop)) {
+                $mp = (Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction SilentlyContinue).MountPoint
+                if ($mp) { [void]$found.Add(([string]$mp).TrimEnd('\')) }
+            }
+        } catch { }
+        foreach ($v in 'OneDrive', 'OneDriveConsumer', 'OneDriveCommercial') {
+            $e = [Environment]::GetEnvironmentVariable($v)
+            if ($e) { [void]$found.Add($e.TrimEnd('\')) }
+        }
+        $script:ReclaimOneDriveSystemRoots = @($found)
+    }
+    $roots = @($script:ReclaimOneDriveSystemRoots)
+    $c = (Get-ReclaimConfig).PSObject.Properties['oneDriveRoots']
+    if ($c -and $c.Value) { $roots += @($c.Value | ForEach-Object { ([string]$_).TrimEnd('\') }) }
+    return @($roots | Where-Object { $_ } | Select-Object -Unique)
+}
+
+function Test-ReclaimInOneDrive([string]$Path) {
+    $p = $Path.TrimEnd('\')
+    $why = 'moving it would delete it from OneDrive on every device; use OneDrive "Free up space" instead'
+    foreach ($r in Get-ReclaimOneDriveRoots) {
+        if ($p -ieq $r -or $p.StartsWith("$r\", [StringComparison]::OrdinalIgnoreCase)) { return "inside a OneDrive folder ($r): $why" }
+    }
+    if ($p -match '^[A-Za-z]:\\Users\\[^\\]+\\OneDrive( - [^\\]+)?(\\|$)') { return "inside a OneDrive folder: $why" }
+    return $null
+}
+
 # Places Reclaim never moves, whatever a plan says. Returns the reason, or $null.
 function Test-ReclaimProtectedPath([string]$Path) {
     $p = $Path.TrimEnd('\')
@@ -78,6 +113,8 @@ function Test-ReclaimProtectedPath([string]$Path) {
             if ($p -ieq $xx -or $p.StartsWith("$xx\", [StringComparison]::OrdinalIgnoreCase)) { return "protected by config (protectedPaths: $x)" }
         }
     }
+    $od = Test-ReclaimInOneDrive $p
+    if ($od) { return $od }
     foreach ($x in @((Get-ReclaimConfig).dataRoot.TrimEnd('\'), $script:ReclaimRepoDir.TrimEnd('\'))) {
         if ($p -ieq $x -or $p.StartsWith("$x\", [StringComparison]::OrdinalIgnoreCase) -or
             $x.StartsWith("$p\", [StringComparison]::OrdinalIgnoreCase)) { return "Reclaim's own files ($x)" }
@@ -360,7 +397,7 @@ function Get-ReclaimQuarantineEntries {
         if ((Test-ReclaimUndone $rc.id) -or (Test-ReclaimPurged $rc.id)) { continue }
         [pscustomobject]@{
             id = $rc.id; created = $rc.created; purgeAfter = $rc.purgeAfter; dest = $rc.dest
-            onDisk = [long]$rc.bytes.onDisk; name = $rc.item.name; path = $rc.item.path; pinned = (Test-ReclaimPinned $rc.id)
+            onDisk = [long]$rc.bytes.onDisk; files = [int]$rc.counts.moved; name = $rc.item.name; path = $rc.item.path; pinned = (Test-ReclaimPinned $rc.id)
         }
     }
 }

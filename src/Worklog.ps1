@@ -35,7 +35,7 @@ function Write-ReclaimWorklog {
     $rc = if ($Receipts -and $Receipts.Count) { $Receipts -join ',' } else { '-' }
     $line = '{0} | {1} | {2} | {3} | {4} | reclaimed {5} GB | receipts {6} | {7}' -f `
         (Get-Date).ToString('yyyy-MM-dd HH:mm:ss'), $cfg.hostName, $Command, $Drive, $Mode,
-        (Format-GB $ReclaimedBytes), $rc, (Remove-ReclaimPaths $Note)
+        ('{0:N3}' -f ($ReclaimedBytes / 1GB)), $rc, (Remove-ReclaimPaths $Note)
     Write-ReclaimLog "worklog: $line"
     $pending = Get-ReclaimPendingPath
 

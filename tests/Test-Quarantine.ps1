@@ -234,6 +234,18 @@ Invoke-Test 'apply: a files-kind item moves only its matching members' {
     Assert-True (Test-Path -LiteralPath "$dir\keep.txt") 'non-member untouched'
 }
 
+Invoke-Test 'apply: never moves anything inside a OneDrive sync root' {
+    $dir = New-FixtureDir 'ql' 'reclaim-test-safe' 1
+    $cfg = Get-ReclaimConfig
+    $cfg | Add-Member -NotePropertyName oneDriveRoots -NotePropertyValue @((Split-Path -Parent $dir)) -Force
+    try {
+        $res = @(Invoke-ReclaimApply -Only @('T-021') -Confirm $yes -Plan (New-TestPlan @(New-PlanEntry 'T-021' $dir 'test-safe')))
+        Assert-Equal 'refused' $res[0].Status 'OneDrive content refused'
+        Assert-True ($res[0].Reason -like '*OneDrive*') "reason: $($res[0].Reason)"
+        Assert-True (Test-Path -LiteralPath "$dir\f1.bin") 'untouched'
+    } finally { $cfg.oneDriveRoots = @() }
+}
+
 Invoke-Test 'apply: folders listed in config protectedPaths are never moved' {
     $dir = New-FixtureDir 'qh' 'reclaim-test-safe' 1
     $cfg = Get-ReclaimConfig

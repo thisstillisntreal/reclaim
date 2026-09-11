@@ -155,7 +155,7 @@ function Write-ReclaimScanReport($Doc) {
         if ($gap -ge 0) {
             Write-Host ("  Unmeasured   {0} = volume used minus measured: denied folders, NTFS metadata, shadow copies. A lower bound: hard links (WinSxS) are counted once per link." -f (Format-Bytes $gap)) -ForegroundColor Yellow
         } else {
-            Write-Host ("  Overcount    measured is {0} MORE than the volume uses: hard links (WinSxS / System32) are counted once per link, so Windows folder sizes overstate real usage by at least that much." -f (Format-Bytes (-$gap))) -ForegroundColor Yellow
+            Write-Host ("  Overcount    measured is {0} MORE than the volume uses: hard links (WinSxS, pnpm stores and the like) are counted once per link, so the folders holding them overstate real usage by at least that much." -f (Format-Bytes (-$gap))) -ForegroundColor Yellow
         }
     }
     if ([long]$t.placeholderLogical -gt 0) {

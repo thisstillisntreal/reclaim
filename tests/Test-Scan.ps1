@@ -37,7 +37,7 @@ Invoke-Test 'worklog: hub disabled -> line queued locally, reported as not sent'
     Assert-Equal $false $res.Sent 'not sent'
     $pending = Join-Path (Get-ReclaimPath) 'worklog-pending.txt'
     $text = [IO.File]::ReadAllText($pending)
-    Assert-True ($text -like '*| scan | T | UNELEVATED | reclaimed 0.00 GB | receipts - | test*') "pending line: $text"
+    Assert-True ($text -like '*| scan | T | UNELEVATED | reclaimed 0.000 GB | receipts - | test*') "pending line: $text"
 }
 
 function New-FakeHub([string]$Dir) {

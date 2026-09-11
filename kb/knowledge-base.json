@@ -510,7 +510,7 @@
     },
     {
       "id": "vhd-generic", "name": "Virtual hard disk", "kind": "file",
-      "patterns": ["**\\*.vhdx", "**\\*.vhd"],
+      "patterns": ["**\\*.vhdx", "**\\*.vhd", "**\\*.vdi", "**\\*.vmdk"],
       "creator": "A virtualization or backup tool; the file itself does not say which",
       "purpose": "A virtual machine's or backup's disk image.",
       "breaks": "The VM or backup that uses it breaks if it is moved without that tool knowing.",
@@ -532,7 +532,7 @@
     },
     {
       "id": "pcap", "name": "Packet capture", "kind": "file",
-      "patterns": ["**\\*.pcap", "**\\*.pcapng"],
+      "patterns": ["**\\*.pcap", "**\\*.pcapng", "**\\*.pcap.gz", "**\\*.pcapng.gz"],
       "creator": "Wireshark / dumpcap / tcpdump",
       "purpose": "Recorded network traffic.",
       "breaks": "Nothing in Windows; the capture is no longer at this path.",
@@ -895,6 +895,35 @@
       "safety": "KEEP", "regenerates": "yes - definitions download again",
       "action": "KEEP", "method": "Leave it; Defender manages its own retention.",
       "command": "", "processes": ["MsMpEng"], "hotspot": false
+    },
+    {
+      "id": "node-modules-app", "name": "Application-bundled node_modules", "kind": "dir",
+      "patterns": [
+        "?:\\Program Files\\**\\node_modules", "?:\\Program Files (x86)\\**\\node_modules",
+        "%USERS%\\AppData\\Local\\Programs\\**\\node_modules",
+        "**\\resources\\app\\node_modules", "**\\resources\\app\\node_modules\\**\\node_modules",
+        "**\\resources\\app.asar.unpacked\\node_modules", "**\\resources\\app.asar.unpacked\\node_modules\\**\\node_modules",
+        "%USERS%\\.*\\**\\node_modules"
+      ],
+      "creator": "An installed program or editor extension that ships its own JavaScript dependencies",
+      "purpose": "Part of an installed application or extension, not of a project you build.",
+      "breaks": "The program or extension stops working.",
+      "safety": "KEEP", "regenerates": "no - reinstall the program or extension to restore it",
+      "action": "KEEP", "method": "Leave it. Uninstall the program or extension if you no longer use it.",
+      "command": "start ms-settings:appsfeatures", "processes": [], "hotspot": false
+    },
+    {
+      "id": "node-modules-global", "name": "Global Node.js packages (npm -g, nvm)", "kind": "dir",
+      "patterns": [
+        "%USERS%\\AppData\\Roaming\\npm\\node_modules", "%USERS%\\AppData\\Local\\nvm\\**\\node_modules",
+        "?:\\nvm4w\\**\\node_modules", "?:\\Program Files\\nodejs\\node_modules"
+      ],
+      "creator": "npm install -g, the Node.js installer, or nvm",
+      "purpose": "npm itself and every command-line tool installed globally for this machine's Node.js.",
+      "breaks": "npm, npx and every globally installed CLI stop working (possibly including the tools running this cleanup).",
+      "safety": "KEEP", "regenerates": "no - each global package has to be installed again",
+      "action": "CLEAR-FROM-APP", "method": "List them with 'npm ls -g --depth=0' and uninstall the ones you don't use.",
+      "command": "npm uninstall -g <package>", "processes": [], "hotspot": false
     }
   ]
 }
