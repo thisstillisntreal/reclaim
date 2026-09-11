@@ -78,6 +78,16 @@ Invoke-Test 'plan: a files item directly inside a folder item is excluded file b
     Assert-True (-not (@($e.exclude) -contains $dl)) 'the folder itself is not excluded'
 }
 
+Invoke-Test 'plan: items are re-rated with the current knowledge base, not the one the scan used' {
+    $scan = New-SyntheticScan 'Z' @(
+        @{ kind = 'dir'; path = 'Z:\Program Files\Vendor\App\node_modules'; ruleId = 'node-modules'; onDisk = 1GB }
+    )
+    $e = @(ConvertTo-ReclaimPlanEntries -Scan $scan)[0]
+    Assert-Equal 'node-modules-app' $e.ruleId 're-rated by the current KB'
+    Assert-Equal 'KEEP' $e.action 'app-bundled -> KEEP'
+    Assert-Equal $false $e.executable 'not executable'
+}
+
 Invoke-Test 'plan: nothing inside a OneDrive folder is moved (it would be deleted from OneDrive everywhere)' {
     $u = [IO.Path]::GetFileName($env:USERPROFILE)
     $scan = New-SyntheticScan 'Z' @(

@@ -274,7 +274,8 @@
     },
     {
       "id": "npm-cache", "name": "npm cache", "kind": "dir",
-      "patterns": ["%USERS%\\AppData\\Local\\npm-cache", "%USERS%\\AppData\\Roaming\\npm-cache"],
+      "patterns": ["%USERS%\\AppData\\Local\\npm-cache", "%USERS%\\AppData\\Roaming\\npm-cache",
+        "%USERS%\\AppData\\Local\\npm-cache\\**\\node_modules", "%USERS%\\AppData\\Roaming\\npm-cache\\**\\node_modules"],
       "creator": "npm (Node.js package manager)",
       "purpose": "Content-addressed cache of every package tarball npm has downloaded.",
       "breaks": "Next installs download packages again; offline installs fail until then.",
@@ -308,7 +309,7 @@
     },
     {
       "id": "yarn-cache", "name": "Yarn cache", "kind": "dir",
-      "patterns": ["%USERS%\\AppData\\Local\\Yarn\\Cache"],
+      "patterns": ["%USERS%\\AppData\\Local\\Yarn\\Cache", "%USERS%\\AppData\\Local\\Yarn\\Cache\\**\\node_modules"],
       "creator": "Yarn (Node.js package manager)",
       "purpose": "Downloaded package cache.",
       "breaks": "Next installs download again.",
@@ -903,7 +904,9 @@
         "%USERS%\\AppData\\Local\\Programs\\**\\node_modules",
         "**\\resources\\app\\node_modules", "**\\resources\\app\\node_modules\\**\\node_modules",
         "**\\resources\\app.asar.unpacked\\node_modules", "**\\resources\\app.asar.unpacked\\node_modules\\**\\node_modules",
-        "%USERS%\\.*\\**\\node_modules"
+        "%USERS%\\.*\\**\\node_modules", "**\\resources\\app\\**\\node_modules",
+        "%USERS%\\AppData\\Roaming\\*\\User\\globalStorage\\**\\node_modules",
+        "%USERS%\\AppData\\Roaming\\Adobe\\**\\node_modules", "%USERS%\\AppData\\Local\\copilot\\**\\node_modules"
       ],
       "creator": "An installed program or editor extension that ships its own JavaScript dependencies",
       "purpose": "Part of an installed application or extension, not of a project you build.",
@@ -916,7 +919,8 @@
       "id": "node-modules-global", "name": "Global Node.js packages (npm -g, nvm)", "kind": "dir",
       "patterns": [
         "%USERS%\\AppData\\Roaming\\npm\\node_modules", "%USERS%\\AppData\\Local\\nvm\\**\\node_modules",
-        "?:\\nvm4w\\**\\node_modules", "?:\\Program Files\\nodejs\\node_modules"
+        "?:\\nvm4w\\**\\node_modules", "?:\\Program Files\\nodejs\\node_modules",
+        "%USERS%\\AppData\\Local\\pnpm\\.tools\\**\\node_modules"
       ],
       "creator": "npm install -g, the Node.js installer, or nvm",
       "purpose": "npm itself and every command-line tool installed globally for this machine's Node.js.",

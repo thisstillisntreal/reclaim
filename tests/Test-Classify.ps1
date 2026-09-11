@@ -59,7 +59,14 @@ Invoke-Test 'kb: shipped knowledge base loads and covers the required seeds' {
 Invoke-Test 'kb: only project node_modules are disposable; app-bundled and global ones are KEEP' {
     $expect = @(
         @('Q:\work\site\node_modules', 'node-modules'),
-        @('C:\Users\alice\AppData\Local\npm-cache\_npx\ab12\node_modules', 'node-modules'),
+        @('C:\Users\alice\AppData\Local\npm-cache\_npx\ab12\node_modules', 'npm-cache'),
+        @('C:\Users\alice\AppData\Local\Yarn\Cache\v6\npm-lodash-4.17.21-integrity\node_modules', 'yarn-cache'),
+        @('C:\Users\alice\AppData\Local\Programs\cursor\resources\app\extensions\cursor-retrieval\node_modules', 'node-modules-app'),
+        @('C:\Windows.old\Users\alice\AppData\Local\Programs\cursor\resources\app\extensions\node_modules', 'node-modules-app'),
+        @('C:\Users\alice\AppData\Roaming\Cursor\User\globalStorage\ms-edgedevtools.x\node_modules', 'node-modules-app'),
+        @('C:\Users\alice\AppData\Roaming\Adobe\Dreamweaver 2021\en_US\Configuration\Updates\Core\Node\node_modules', 'node-modules-app'),
+        @('C:\Users\alice\AppData\Local\copilot\pkg\win32-x64\1.0.51\sharp\node_modules', 'node-modules-app'),
+        @('C:\Users\alice\AppData\Local\pnpm\.tools\pnpm\10.4.1_tmp_1\node_modules', 'node-modules-global'),
         @('C:\Program Files\Common Files\Adobe\Libraries\js\node_modules', 'node-modules-app'),
         @('C:\Program Files (x86)\Tool\node_modules', 'node-modules-app'),
         @('C:\Users\alice\AppData\Local\Programs\cursor\resources\app\node_modules', 'node-modules-app'),

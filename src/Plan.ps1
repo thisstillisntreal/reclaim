@@ -17,13 +17,25 @@ function Get-ReclaimSum($Objects, [string]$Property) {
     return $s
 }
 
+# The rule an item has under the knowledge base as it is now; the scan may predate KB edits.
+# No exact match any more means UNKNOWN (never proposed).
+function Get-ReclaimCurrentRuleId($Item) {
+    $rules = (Get-ReclaimKb).Rules
+    $path = if ($Item.kind -eq 'files' -and @($Item.members).Count) { [string]@($Item.members)[0] } else { [string]$Item.path }
+    $path = $path.TrimEnd('\')
+    $i = [Reclaim.Rule]::Best($rules, ($Item.kind -ne 'dir'), [IO.Path]::GetFileName($path), $path)
+    if ($i -ge 0) { return $rules[$i].Id }
+    return $null
+}
+
 function ConvertTo-ReclaimPlanEntries($Scan) {
     $dataDrive = (Get-ReclaimConfig).dataRoot.Substring(0, 1).ToUpperInvariant()
     $running = Get-ReclaimRunningProcessNames
     $items = @($Scan.items)
     foreach ($it in $items) {
-        $e = Get-ReclaimEntry $it.ruleId
-        $safety = if ($it.ruleId) { $e.safety } else { 'UNKNOWN' }
+        $ruleId = Get-ReclaimCurrentRuleId $it
+        $e = Get-ReclaimEntry $ruleId
+        $safety = if ($ruleId) { $e.safety } else { 'UNKNOWN' }
         $action = if ($safety -eq 'UNKNOWN') { 'KEEP' } else { $e.action }
         $needsAdmin = Test-ReclaimNeedsAdmin $it.path $e
         $executable = $action -in 'DELETE', 'MOVE'
@@ -65,7 +77,7 @@ function ConvertTo-ReclaimPlanEntries($Scan) {
         }
 
         [pscustomobject][ordered]@{
-            id = $it.id; drive = $drive; kind = $it.kind; path = $it.path; ruleId = $it.ruleId; name = $e.name
+            id = $it.id; drive = $drive; kind = $it.kind; path = $it.path; ruleId = $ruleId; name = $e.name
             safety = $safety; action = $action; executable = $executable; needsAdmin = $needsAdmin
             onDisk = [long]$it.onDisk; logical = [long]$it.logical; frees = $frees; freesNote = $freesNote
             command = $command; method = $e.method; reason = $reason
