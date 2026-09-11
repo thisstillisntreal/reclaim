@@ -14,6 +14,14 @@ function Invoke-ReclaimHubKv([string]$Verb, [string]$Key, [string]$InputText = '
     return [pscustomobject]@{ Code = $code; Output = ((@($out) | ForEach-Object { "$_" }) -join "`n").Trim() }
 }
 
+# Hub lines carry drive, mode, sizes and receipt ids - never file paths (fleet rule: no wallet
+# or personal paths in shared logs). Paths stay in the local log and receipts.
+function Remove-ReclaimPaths([string]$Text) {
+    if (-not $Text) { return $Text }
+    $t = [regex]::Replace($Text, '\\\\[^\s|;,]+', '<path>')
+    return [regex]::Replace($t, '(?i)\b[a-z]:\\[^|;,]*', '<path>')
+}
+
 function Write-ReclaimWorklog {
     param(
         [string]$Command,
@@ -27,7 +35,7 @@ function Write-ReclaimWorklog {
     $rc = if ($Receipts -and $Receipts.Count) { $Receipts -join ',' } else { '-' }
     $line = '{0} | {1} | {2} | {3} | {4} | reclaimed {5} GB | receipts {6} | {7}' -f `
         (Get-Date).ToString('yyyy-MM-dd HH:mm:ss'), $cfg.hostName, $Command, $Drive, $Mode,
-        (Format-GB $ReclaimedBytes), $rc, $Note
+        (Format-GB $ReclaimedBytes), $rc, (Remove-ReclaimPaths $Note)
     Write-ReclaimLog "worklog: $line"
     $pending = Get-ReclaimPendingPath
 

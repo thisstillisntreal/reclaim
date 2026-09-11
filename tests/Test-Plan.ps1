@@ -64,6 +64,18 @@ Invoke-Test 'plan: actions come from the KB; UNKNOWN is KEEP; admin locations fl
     Assert-Equal ([long]0) ([long]$d.frees) 'same volume as the data root frees nothing now'
 }
 
+Invoke-Test 'plan: anything under a configured protected path is KEEP' {
+    $cfg = Get-ReclaimConfig
+    $cfg | Add-Member -NotePropertyName protectedPaths -NotePropertyValue @('Z:\Vault') -Force
+    try {
+        $scan = New-SyntheticScan 'Z' @(@{ kind = 'dir'; path = 'Z:\Vault\proj\node_modules'; ruleId = 'node-modules'; onDisk = 2GB })
+        $e = @(ConvertTo-ReclaimPlanEntries -Scan $scan)[0]
+        Assert-Equal 'KEEP' $e.action 'protected -> KEEP'
+        Assert-Equal $false $e.executable 'not executable'
+        Assert-True ($e.reason -like '*protected*') "reason: $($e.reason)"
+    } finally { $cfg.protectedPaths = @() }
+}
+
 Invoke-Test 'plan: builds from the latest scan, is saved, and changes nothing on disk' {
     $root = New-TestDir 'planroot'
     [void](New-Item -ItemType Directory -Force -Path "$root\web\node_modules")

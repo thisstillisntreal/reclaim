@@ -100,7 +100,7 @@ function Invoke-ReclaimHotspots([string[]]$Drives) {
         $h = Get-ReclaimHotspots -Drive $d
         Write-ReclaimHotspotsReport $h
         $top = @($h.Growth) | Select-Object -First 1
-        $note = if ($top) { 'top growth +{0} {1}' -f (Format-Bytes $top.Delta), $top.Path } else { 'baseline walk, no earlier scan' }
+        $note = if ($top) { 'top growth +{0} in one folder (path in the local scan)' -f (Format-Bytes $top.Delta) } else { 'baseline walk, no earlier scan' }
         Write-WorklogStatus (Write-ReclaimWorklog -Command 'hotspots' -Drive "$($d):" -Mode $doc.mode -Note $note)
     }
 }

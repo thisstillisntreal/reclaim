@@ -18,6 +18,7 @@ function Get-ReclaimConfig {
         purgeDays           = 30
         advisorModel        = 'claude-haiku-4-5'
         hostName            = $env:COMPUTERNAME
+        protectedPaths      = @()          # never proposed, never moved (e.g. wallet folders); set in config.local.json
     }
     $local = Join-Path $script:ReclaimRepoDir 'config.local.json'
     if (Test-Path -LiteralPath $local) {

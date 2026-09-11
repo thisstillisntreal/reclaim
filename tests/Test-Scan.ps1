@@ -66,6 +66,14 @@ def call(method, path, body=None):
     return (Join-Path $Dir 'fakehub.py')
 }
 
+Invoke-Test 'worklog: notes never carry file paths to the hub' {
+    $res = Write-ReclaimWorklog -Command 'explain' -Drive 'C:' -Note 'C:\Users\someone\Wallets\key.dat -> UNKNOWN (1 MB); also D:\x y\z and \\server\share\f'
+    Assert-True ($res.Line -notmatch '[A-Za-z]:\\') "no drive path in: $($res.Line)"
+    Assert-True ($res.Line -notmatch '\\\\server') "no UNC path in: $($res.Line)"
+    Assert-True ($res.Line -like '*<path>*') 'paths replaced by a marker'
+    Assert-True ($res.Line -like '*| explain | C: |*') 'drive field kept'
+}
+
 Invoke-Test 'worklog: hub append only adds lines, never replaces; failures do not write' {
     $dir = New-TestDir 'fakehub'
     $cfg = Get-ReclaimConfig

@@ -178,6 +178,6 @@ function Invoke-ReclaimExplain([string]$Path, [switch]$Ai) {
     } elseif ($Ai) {
         Write-Host '  Advisor not asked: the knowledge base already covers this item.' -ForegroundColor DarkGray
     }
-    $note = '{0} -> {1} ({2})' -f $x.Path, $x.Entry.name, (Format-Bytes $x.OnDisk)
+    $note = '{0}: {1} ({2})' -f $x.Entry.safety, $x.Entry.name, (Format-Bytes $x.OnDisk)
     Write-WorklogStatus (Write-ReclaimWorklog -Command 'explain' -Drive $x.Path.Substring(0, 2) -Note $note)
 }

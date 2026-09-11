@@ -45,6 +45,12 @@ function ConvertTo-ReclaimPlanEntries($Scan) {
 
         $reason = if ($safety -eq 'UNKNOWN') { 'unknown - not in the knowledge base; never proposed' }
                   else { "$safety; regenerates: $($e.regenerates)" }
+        # Protected locations: config protectedPaths are always KEEP; built-in ones block moves.
+        $prot = Test-ReclaimProtectedPath $it.path
+        if ($prot -and ($prot -like 'protected by config*' -or $executable)) {
+            $action = 'KEEP'; $executable = $false; $command = ''; $frees = [long]0; $freesNote = ''
+            $reason = "protected: $prot"
+        }
         $procs = @(Get-EntryValue $e 'processes' @())
         $runningNow = @($procs | Where-Object { $_ -and $running.ContainsKey($_.ToLowerInvariant()) })
 

@@ -240,6 +240,6 @@ function Invoke-ReclaimShow([string]$Target, [switch]$NoOpen) {
     }
     Write-Host "Chart: $($v.Chart) - $($v.Reason)"
     Write-Host "View: $($v.File)$(if ($NoOpen) { '' } else { '  (opened in your browser)' })" -ForegroundColor DarkGray
-    Write-WorklogStatus (Write-ReclaimWorklog -Command 'show' -Drive $v.Tree.p.Substring(0, 2) -Note "$($v.Tree.p) -> $($v.Chart); $($v.File)")
+    Write-WorklogStatus (Write-ReclaimWorklog -Command 'show' -Drive $v.Tree.p.Substring(0, 2) -Note "$($v.Chart); $(Format-Bytes $v.Tree.s) on disk")
     return $v
 }

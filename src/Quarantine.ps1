@@ -23,6 +23,14 @@ function Write-ReclaimJson([string]$Path, $Object) {
 function Test-ReclaimProtectedPath([string]$Path) {
     $p = $Path.TrimEnd('\')
     if ($p.Length -le 3) { return 'a drive root' }
+    $cfgProtected = (Get-ReclaimConfig).PSObject.Properties['protectedPaths']
+    if ($cfgProtected -and $cfgProtected.Value) {
+        foreach ($x in @($cfgProtected.Value)) {
+            $xx = ([string]$x).TrimEnd('\')
+            if (-not $xx) { continue }
+            if ($p -ieq $xx -or $p.StartsWith("$xx\", [StringComparison]::OrdinalIgnoreCase)) { return "protected by config (protectedPaths: $x)" }
+        }
+    }
     foreach ($x in @((Get-ReclaimConfig).dataRoot.TrimEnd('\'), $script:ReclaimRepoDir.TrimEnd('\'))) {
         if ($p -ieq $x -or $p.StartsWith("$x\", [StringComparison]::OrdinalIgnoreCase) -or
             $x.StartsWith("$p\", [StringComparison]::OrdinalIgnoreCase)) { return "Reclaim's own files ($x)" }
