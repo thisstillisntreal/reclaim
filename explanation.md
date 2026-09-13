@@ -70,17 +70,27 @@ live size before each one. `--yes-to-safe` skips the questions for SAFE items on
 
 ## What it found on C:
 
-Elevated, it measures 214.6 GB on a 232 GB drive with 26 GB free.
+Measured elevated on 2026-09-13: 198.1 GB on a 232 GB drive, 43.2 GB free.
 
-- **~21 GB it can move for you**, all undo-able: npm cache, old Wireshark captures, a Cursor database
-  backup, browser caches, temp folders, crash dumps.
-- **~46 GB you free yourself** with the commands it prints: Windows.old 17.6 GB, Windows Search index
-  12.9 GB, paging file 9.5 GB, Windows Update downloads 2.9 GB, restore points 2.7 GB.
+- **20.2 GB it can move for you**, all undo-able: npm cache 4.2 GB, unsaved Wireshark captures 3.5 GB,
+  a Cursor database backup 2.2 GB, browser caches, temp folders, crash dumps.
+- **28.7 GB you free yourself** with the commands it prints: the Windows Search index 12.9 GB (rebuild
+  it), the paging file 9.5 GB (already moved, see below), and smaller items.
+- A leftover `TEMP.*` user profile holds 3.8 GB; worth looking through before moving it.
 - OneDrive shows 31 GB on disk; another 139 GB of it is cloud-only and already takes no space.
 - Unelevated it cannot see about 43 GB (86 folders refused), and it says so on every run.
 
-Nothing has been applied. The only files it has ever moved are three test files that were created for
-that purpose and then restored, byte for byte.
+### Done on 2026-09-13, by hand, not by Reclaim
+
+- **Windows.old removed** through Disk Cleanup's "Previous Installations" handler: **+17.4 GB** on C:
+  (26.2 GB free before, 43.2 GB after). Permanent - there is no rolling back to the previous Windows
+  build now.
+- **Paging file moved** from C: to `Q:\pagefile.sys` (the NVMe SSD), system-managed, Windows' automatic
+  management turned off. `C:\pagefile.sys` releases its **9.5 GB at the next reboot**. While C: has no
+  paging file, Windows cannot write a kernel crash dump unless a dedicated dump file is configured.
+
+Reclaim itself has still never applied anything on this machine. The only files it has moved are three
+test files created for that purpose and then restored, byte for byte.
 
 ## Trust, and how it was checked
 
